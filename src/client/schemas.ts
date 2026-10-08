@@ -26,12 +26,28 @@ export const MountedArchiveSchema = looseObject({
 });
 export const MountedArchiveListSchema = z.array(MountedArchiveSchema);
 
-/** GET /api/archives/:id/info (I1, ADMIN): counts and sizes only. Exact fields per the R0 spec. */
+/** GET /api/archives/:id/info (I1, ADMIN): counts and sizes only, no filesystem paths. */
 export const ArchiveInfoSchema = looseObject({
-  entry_count: z.number().optional(),
-  artifact_count: z.number().optional(),
-  blob_count: z.number().optional(),
-  total_bytes: z.number().optional(),
+  archive_id: z.string(),
+  label: z.string(),
+  name: z.string().nullable().optional(),
+  entry_count: z.number(),
+  root_entry_count: z.number(),
+  child_entry_count: z.number().optional(),
+  artifact_count: z.number(),
+  blob_count: z.number(),
+  blob_bytes: z.number(),
+  tag_count: z.number(),
+  collection_count: z.number(),
+  run_count: z.number(),
+  summary_count: z.number(),
+  job_counts: looseObject({
+    pending: z.number(),
+    running: z.number(),
+    completed: z.number(),
+    failed: z.number(),
+  }),
+  db_bytes: z.number().optional(),
 });
 
 // ── Entries ─────────────────────────────────────────────────────────────────
@@ -296,16 +312,22 @@ export const TokenCreatedSchema = looseObject({
   scope: TokenScopeSchema.optional(),
 });
 
-/** GET /api/auth/sessions (S1). `session_handle` is the first 16 hex of hash_token(session_uid); the session id itself is never returned. */
+/**
+ * GET /api/auth/sessions (S1). `session_handle` is the first 16 hex of hash_token(session_uid);
+ * the session id itself (the cookie value) is never returned.
+ */
 export const SessionRecordSchema = looseObject({
   session_handle: z.string(),
-  created_at: z.string().optional(),
-  last_seen_at: nullableString.optional(),
-  expires_at: z.string().optional(),
-  user_agent: nullableString.optional(),
-  current: z.boolean().optional(),
+  created_at: z.string(),
+  last_seen_at: z.string(),
+  expires_at: z.string(),
+  user_agent: nullableString,
+  current: z.boolean(),
 });
 export const SessionListSchema = z.array(SessionRecordSchema);
+
+/** DELETE /api/auth/sessions (S3) and DELETE /api/admin/users/:uid/sessions (U3). */
+export const RevokedCountSchema = looseObject({ revoked: z.number() });
 
 // ── Admin: users, roles, tokens ─────────────────────────────────────────────
 
@@ -332,8 +354,22 @@ export const RoleRecordSchema = looseObject({
 });
 export const RoleRecordListSchema = z.array(RoleRecordSchema);
 
-/** GET /api/admin/users/:uid/tokens (U4). */
+/** GET /api/admin/users/:uid/tokens (U4). Same item shape as the caller's own token list (T2). */
 export const UserTokenListSchema = ApiTokenListSchema;
+
+/** POST /api/admin/users/:uid/password (U2). */
+export const PasswordResetResultSchema = looseObject({
+  user_uid: z.string(),
+  sessions_revoked: z.number(),
+  tokens_revoked: z.number(),
+});
+
+/** DELETE /api/admin/roles/:slug (R2): 200 with a summary (not 204). */
+export const RoleDeletedSchema = looseObject({
+  slug: z.string(),
+  users_affected: z.number(),
+  reorder_mask_cleared: z.boolean(),
+});
 
 // ── Admin: settings, tooling, cookie rules, effective config ────────────────
 
@@ -413,18 +449,51 @@ export const CookieRuleSchema = looseObject({
 });
 export const CookieRuleListSchema = z.array(CookieRuleSchema);
 
-/** One row of GET /api/admin/effective-config (I2). Secrets expose only `set`. Exact fields per the R0 spec. */
+/** One env var row of GET /api/admin/effective-config (I2). Secrets expose only `set`; `value` is null for them. */
 export const EffectiveConfigVarSchema = looseObject({
   name: z.string(),
-  group: z.string().optional(),
-  description: z.string().optional(),
-  secret: z.boolean().optional(),
-  default: nullableString.optional(),
-  set: z.boolean().optional(),
-  value: nullableString.optional(),
+  group: z.string(),
+  description: z.string(),
+  secret: z.boolean(),
+  default: nullableString,
+  set: z.boolean(),
+  source: z.enum(["env", "default", "unset"]).optional(),
+  value: nullableString,
 });
+
+/** GET /api/admin/effective-config (I2): flat read-only view of env-derived configuration. */
 export const EffectiveConfigSchema = looseObject({
-  vars: z.array(EffectiveConfigVarSchema).optional(),
+  server: looseObject({
+    version: z.string().optional(),
+    bind: looseObject({ value: nullableString, source: z.string() }).optional(),
+    archives: z.array(looseObject({ id: z.string(), label: z.string() })).optional(),
+  }),
+  env_vars: z.array(EffectiveConfigVarSchema),
+  summary_providers: z.array(
+    looseObject({
+      kind: z.string(),
+      configured: z.boolean(),
+      model: nullableString.optional(),
+      error: nullableString.optional(),
+      missing_env: z.array(z.string()).optional(),
+    }),
+  ),
+  title_models: z.record(
+    z.string(),
+    looseObject({ model: nullableString, source: z.string(), env_var: z.string().optional() }),
+  ),
+  transcription_engines: z.array(
+    looseObject({
+      kind: z.string(),
+      enabled: z.boolean().optional(),
+      configured: z.boolean().optional(),
+      label: z.string().optional(),
+      english_only: z.boolean().optional(),
+      languages: z.array(z.string()).optional(),
+      error: nullableString.optional(),
+    }),
+  ),
+  extensions: z.record(z.string(), looseObject({ available: z.boolean() })),
 });
 
 // ── Maintenance ─────────────────────────────────────────────────────────────
@@ -463,3 +532,5 @@ export type UserSummary = z.infer<typeof UserSummarySchema>;
 export type RoleRecord = z.infer<typeof RoleRecordSchema>;
 export type InstanceSettings = z.infer<typeof InstanceSettingsSchema>;
 export type CookieRule = z.infer<typeof CookieRuleSchema>;
+export type EffectiveConfig = z.infer<typeof EffectiveConfigSchema>;
+export type ArchiveInfo = z.infer<typeof ArchiveInfoSchema>;

@@ -75,7 +75,7 @@ describe("response schemas parse the shapes the server sends", () => {
     const ext = S.ApiTokenListSchema.parse([{ token_uid: "t", name: "n", created_at: "t", last_used_at: "x", expires_at: null, scope: "read" }]);
     expect(ext[0]?.scope).toBe("read");
     expect(S.TokenCreatedSchema.parse({ token_uid: "t", raw_token: "r", name: "n", expires_at: "x", scope: "full" }).raw_token).toBe("r");
-    expect(S.SessionListSchema.parse([{ session_handle: "0123456789abcdef", current: true }])).toHaveLength(1);
+    expect(S.SessionListSchema.parse([{ session_handle: "0123456789abcdef", created_at: "t", last_seen_at: "t", expires_at: "t", user_agent: null, current: true }])).toHaveLength(1);
     expect(S.ApiTokenRecordSchema.safeParse({ token_uid: "t", name: "n", created_at: "t", last_used_at: null, scope: "admin" }).success).toBe(false);
   });
 
