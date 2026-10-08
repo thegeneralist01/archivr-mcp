@@ -3,6 +3,7 @@ import { ArchivrApiError, ToolUserError } from "../client/errors";
 import { seg } from "../client/http";
 import { CookieRuleSchema, PasswordResetResultSchema, TokenCreatedSchema, UserCreatedSchema } from "../client/schemas";
 import { jsonResult } from "../lib/output";
+import { redactString } from "../lib/redact";
 import { describeCookieRule } from "./admin-settings";
 import { defineTool, WRITE, type ToolModule } from "./registry";
 
@@ -14,6 +15,21 @@ const cookiesInput = z
   .describe("Cookie name -> value map. Values are stored on the server and never returned.");
 
 const patternKind = z.enum(["global", "wildcard", "regex"]).describe("global: applies to every URL; wildcard/regex: matched against url_pattern");
+
+/**
+ * The registry only scrubs known-sensitive argument names; `cookies` is not one, so if the server
+ * echoes a cookie value in an error, scrub the supplied values here.
+ */
+async function scrubbingCookies<T>(cookies: Record<string, string> | undefined, run: () => Promise<T>): Promise<T> {
+  try {
+    return await run();
+  } catch (error) {
+    if (error instanceof ArchivrApiError && cookies !== undefined) {
+      throw new ArchivrApiError(error.status, redactString(error.serverMessage, Object.values(cookies)), error.endpoint);
+    }
+    throw error;
+  }
+}
 
 export const createApiToken = defineTool({
   name: "create_api_token",
@@ -137,14 +153,16 @@ export const createCookieRule = defineTool({
     cookies: cookiesInput,
   },
   async handler(args, ctx) {
-    const rule = await ctx.client.request("POST", "/api/admin/cookie-rules", {
-      json: {
-        url_pattern: args.url_pattern ?? null,
-        pattern_kind: args.pattern_kind,
-        cookies_json: JSON.stringify(args.cookies),
-      },
-      schema: CookieRuleSchema,
-    });
+    const rule = await scrubbingCookies(args.cookies, () =>
+      ctx.client.request("POST", "/api/admin/cookie-rules", {
+        json: {
+          url_pattern: args.url_pattern ?? null,
+          pattern_kind: args.pattern_kind,
+          cookies_json: JSON.stringify(args.cookies),
+        },
+        schema: CookieRuleSchema,
+      }),
+    );
     return jsonResult(describeCookieRule(rule));
   },
 });
@@ -172,7 +190,9 @@ export const updateCookieRule = defineTool({
     if (args.cookies !== undefined) body["cookies_json"] = JSON.stringify(args.cookies);
     if (args.ordinal !== undefined) body["ordinal"] = args.ordinal;
     if (Object.keys(body).length === 0) throw new ToolUserError("Nothing to update: pass at least one field.");
-    await ctx.client.request("PATCH", `/api/admin/cookie-rules/${seg(args.uid)}`, { json: body });
+    await scrubbingCookies(args.cookies, () =>
+      ctx.client.request("PATCH", `/api/admin/cookie-rules/${seg(args.uid)}`, { json: body }),
+    );
     return jsonResult({
       updated_rule_uid: args.uid,
       updated: Object.keys(body).map((k) => (k === "cookies_json" ? "cookies" : k)),
