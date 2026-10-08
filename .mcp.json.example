@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "archivr": {
+      "command": "bun",
+      "args": ["run", "/absolute/path/to/archivr-mcp/src/index.ts"],
+      "env": {
+        "ARCHIVR_URL": "http://127.0.0.1:8080",
+        "ARCHIVR_TOKEN": "paste-an-archivr-api-token-here",
+        "ARCHIVR_MCP_TOOLSETS": "core,capture,organize,account,admin",
+        "ARCHIVR_MCP_READONLY": "false"
+      }
+    }
+  }
+}

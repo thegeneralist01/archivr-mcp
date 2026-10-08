@@ -1,0 +1,26 @@
+{
+  "name": "archivr-mcp",
+  "version": "0.1.0",
+  "private": true,
+  "description": "MCP server (stdio) that manages an Archivr instance over its REST API",
+  "type": "module",
+  "module": "src/index.ts",
+  "engines": {
+    "bun": ">=1.1.0"
+  },
+  "scripts": {
+    "dev": "bun --watch src/index.ts",
+    "start": "bun src/index.ts",
+    "test": "bun test test/unit",
+    "test:e2e": "bun test test/e2e",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.32.1",
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "@types/bun": "1.4.2",
+    "typescript": "7.0.2"
+  }
+}
