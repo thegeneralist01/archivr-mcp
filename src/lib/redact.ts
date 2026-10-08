@@ -9,7 +9,7 @@ export const REDACTED = "[REDACTED]";
 const MIN_SECRET_LENGTH = 4;
 
 /** Keys whose string values are secrets (`password`, `new_password`, `raw_token`, ...). `token_uid` is an identifier, not a secret. */
-const SENSITIVE_KEY = /(^|_)(pass(word|phrase)?|secret|authorization|cookies_json|token)$/i;
+const SENSITIVE_KEY = /(^|_)(pass(word|phrase)?|secret|authorization|cookies_json|cookies|token)$/i;
 
 const BEARER = /(Bearer\s+)[A-Za-z0-9._~+/=-]{8,}/gi;
 
