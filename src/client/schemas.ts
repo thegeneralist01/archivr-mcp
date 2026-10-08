@@ -182,16 +182,15 @@ export const UploadResultSchema = looseObject({
   size: z.number(),
 });
 
-/** One produced item of a capture job (J2: from archive_run_items.produced_entry_id). */
+/** One item of a capture job (J2: `items[]`, capped at 200 server-side). */
 export const CaptureJobItemSchema = looseObject({
-  entry_uid: nullableString.optional(),
+  requested_locator: nullableString.optional(),
   status: z.string().optional(),
-  locator: nullableString.optional(),
-  title: nullableString.optional(),
   error_text: nullableString.optional(),
+  entry_uid: nullableString.optional(),
 });
 
-/** GET .../capture_jobs/:uid (J2 adds `entry_uids` and `items`; J1 adds `created_by`). */
+/** GET .../capture_jobs/:uid (J2 adds `created_by`, `entry_uids`, `items`, `items_truncated`). */
 export const CaptureJobSchema = looseObject({
   job_uid: z.string(),
   archive_id: z.string(),
@@ -205,6 +204,7 @@ export const CaptureJobSchema = looseObject({
   created_by: nullableString.optional(),
   entry_uids: uidList.optional(),
   items: z.array(CaptureJobItemSchema).optional(),
+  items_truncated: z.boolean().optional(),
 });
 /** GET .../capture_jobs (J1). Row shape may omit `entry_uids`/`items`. */
 export const CaptureJobListSchema = z.array(CaptureJobSchema);
