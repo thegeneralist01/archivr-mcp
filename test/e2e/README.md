@@ -5,12 +5,14 @@ stdio (`StdioClientTransport`, command `bun run src/index.ts`). Only text and lo
 are used: there are no network captures.
 
 ```sh
-bun run test:e2e        # defaults ARCHIVR_SERVER_BIN / ARCHIVR_CLI_BIN to the mcp-api debug build
-ARCHIVR_SERVER_BIN=/path/archivr-server ARCHIVR_CLI_BIN=/path/archivr bun test test/e2e
+export ARCHIVR_SERVER_BIN=/path/to/archivr/target/debug/archivr-server
+export ARCHIVR_CLI_BIN=/path/to/archivr/target/debug/archivr
+bun run test:e2e        # fails fast if either variable is unset
 ```
 
-Without `ARCHIVR_SERVER_BIN` (and `ARCHIVR_CLI_BIN`) every e2e suite skips itself, so a plain
-`bun test` stays green.
+The binaries must come from the `mcp-api-extensions` branch of the Archivr repo. Without
+`ARCHIVR_SERVER_BIN` (and `ARCHIVR_CLI_BIN`) every e2e suite skips itself, so a plain `bun test`
+stays green.
 
 What the harness (`harness.ts`) does per suite: `archivr init` an archive, write a TOML registry,
 pick a free port, spawn the server with a clean environment (only `PATH`, `HOME`, `ARCHIVR_BIND`,
