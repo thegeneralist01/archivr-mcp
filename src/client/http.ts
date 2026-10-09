@@ -5,6 +5,7 @@ import {
   ArchivrNetworkError,
   ArchivrProtocolError,
   ArchivrTimeoutError,
+  ToolUserError,
 } from "./errors";
 
 export type FetchLike = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
@@ -65,12 +66,23 @@ export interface ClientOptions {
 
 const MAX_ERROR_MESSAGE_CHARS = 500;
 
+/** `.` and `..` (also written `%2e`): the URL parser resolves these as dot segments, so they can never be one id. */
+const DOT_SEGMENT = /^(\.|%2e){1,2}$/i;
+
 /**
  * Encode a model- or user-supplied value for use as one URL path segment. Always use
  * this for ids/uids/slugs so `../` or `/` in an argument cannot change the endpoint.
+ *
+ * Percent-encoding is not enough for `.` and `..`: `new URL()` collapses them (even as `%2e%2e`),
+ * so `DELETE /api/admin/users/u/tokens/..` would silently become `DELETE /api/admin/users/u`.
+ * They are rejected instead.
  */
 export function seg(value: string | number): string {
-  return encodeURIComponent(String(value));
+  const text = String(value);
+  if (DOT_SEGMENT.test(text)) {
+    throw new ToolUserError('An identifier cannot be "." or "..".');
+  }
+  return encodeURIComponent(text);
 }
 
 /**
@@ -142,6 +154,8 @@ export class ArchivrClient {
   ): Promise<{ response: Response; finish: <R>(read: () => Promise<R>) => Promise<R> }> {
     if (!path.startsWith("/")) throw new Error("request path must start with /");
     if (path.includes("?") || path.includes("#")) throw new Error("pass query parameters via options.query");
+    // Defence in depth behind seg(): a dot segment would change which endpoint is called.
+    if (path.split("/").some((part) => DOT_SEGMENT.test(part))) throw new Error("request path must not contain dot segments");
     const url = new URL(this.#baseUrl + path);
     for (const [key, value] of Object.entries(options.query ?? {})) {
       if (value !== undefined && value !== null) url.searchParams.set(key, String(value));

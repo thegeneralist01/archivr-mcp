@@ -6,6 +6,7 @@ import {
   ArchivrNetworkError,
   ArchivrProtocolError,
   ArchivrTimeoutError,
+  ToolUserError,
   describeError,
 } from "../../src/client/errors";
 import { ArchivrClient, seg } from "../../src/client/http";
@@ -203,6 +204,23 @@ describe("ArchivrClient", () => {
     expect(seg("../../admin/users")).toBe("..%2F..%2Fadmin%2Fusers");
     expect(seg("a b")).toBe("a%20b");
     expect(seg(3)).toBe("3");
+    expect(seg("...")).toBe("...");
+  });
+
+  test("seg() refuses dot segments, which the URL parser would resolve into a different endpoint", () => {
+    // Demonstrates the hazard: percent-encoding does not protect against `.` / `..`.
+    expect(new URL("http://h/api/admin/users/u/tokens/..").pathname).toBe("/api/admin/users/u/");
+    expect(new URL("http://h/api/admin/users/u/tokens/%2e%2E").pathname).toBe("/api/admin/users/u/");
+    for (const bad of [".", "..", "%2e", "%2E%2e", ".%2E"]) {
+      expect(() => seg(bad), bad).toThrow(ToolUserError);
+    }
+  });
+
+  test("request() refuses a path that contains a dot segment even if seg() was bypassed", async () => {
+    const api = new MockApi();
+    await expect(api.client().request("DELETE", "/api/admin/users/u/tokens/..")).rejects.toThrow("dot segments");
+    await expect(api.client().request("GET", "/api/%2e%2e/x")).rejects.toThrow("dot segments");
+    expect(api.requests).toHaveLength(0);
   });
 
   test("never leaks the token, bodies or query strings into error messages", async () => {

@@ -68,6 +68,24 @@ describe("account tools", () => {
   });
 });
 
+describe("identifier arguments cannot escape their path segment", () => {
+  test("'..' as an id is refused before any request (it would turn a token revoke into a user delete)", async () => {
+    const api = new MockApi().on("DELETE", "/api/admin/users/u", { status: 204 });
+    for (const [tool, args] of [
+      [revokeUserToken, { user_uid: "u", token_uid: "..", confirm: true }],
+      [revokeUserToken, { user_uid: "..", token_uid: "t", confirm: true }],
+      [deleteUser, { user_uid: "%2e%2e", confirm: true }],
+      [revokeToken, { token_uid: "..", confirm: true }],
+      [deleteRole, { slug: ".", confirm: true }],
+    ] as const) {
+      const result = await run(tool, args, api);
+      expect(result.isError, JSON.stringify(args)).toBe(true);
+      expect(textOf(result)).toContain("cannot be");
+    }
+    expect(api.requests).toHaveLength(0);
+  });
+});
+
 describe("admin user tools", () => {
   test("admin_list users, roles, user_tokens", async () => {
     const api = new MockApi()
