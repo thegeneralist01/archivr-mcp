@@ -86,6 +86,7 @@ describe("M4 tool visibility", () => {
       ["delete_role", { slug: "x" }],
       ["revoke_session", { handle: "h" }],
       ["blob_cleanup_run", { archive: "a" }],
+      ["rearchive_entry", { archive: "a", entry_uid: "e" }],
     ] as const) {
       const result = await connected.client.callTool({ name, arguments: args });
       expect(result.isError).toBe(true);

@@ -121,7 +121,7 @@ Columns: **Role** is the minimum role for the tool to be shown. The server still
 | `probe_url` | user | read, open-world | Run yt-dlp against a URL to list the video qualities before capturing. |
 | `probe_playlist` | user | read, open-world | List the items of a YouTube playlist or channel, YouTube Music playlist, or Spotify album or playlist. |
 | `generate_text_title` | user | read, open-world | Ask a server-configured LLM to suggest a title for a text body (max 2 MiB). |
-| `rearchive_entry` | user | write, open-world | Re-fetch a tweet or tweet thread and replace its archived content in place. |
+| `rearchive_entry` | user | destructive, open-world | Re-fetch a tweet or tweet thread and replace the entry's archived artifacts on success; if the scrape fails the existing data is kept. |
 | `list_capture_jobs` | user | read | List capture jobs in an archive, newest first, optionally filtered by status. |
 | `get_capture_job` | user | read | Get one capture job: status, error, produced entries and per-item outcomes (items capped at 200). |
 | `list_runs` | user | read | List capture runs (one per capture, including each playlist item), newest first. |
@@ -238,7 +238,7 @@ A staged upload is deleted if the capture fails.
 - **Tokens.** The bearer token is sent only to `ARCHIVR_URL`. Redirects are refused with an "unexpected redirect" error, so the token is not forwarded elsewhere.
 - **Redaction.** The token, including escaped variants, is removed from every returned string and log line. `Bearer` values are replaced, and sensitive keys in JSON output are scrubbed.
 - **Logging.** Log lines are fixed messages written to stderr. Stdout is never used for logs.
-- **Destructive operations.** The 13 destructive tools require `confirm: true`.
+- **Destructive operations.** The 14 destructive tools require `confirm: true`.
 - **Secrets in model context.** The `credentials` toolset is off by default for this reason. `create_api_token` returns the raw token once, and that value enters the model's context and transcript. `change_password`, `create_user`, `reset_user_password`, `create_cookie_rule` and `update_cookie_rule` also pass passwords or cookie values through the model's context. Cookie values are never echoed back by the server.
 - **Untrusted archived content.** Archived pages, posts and text can contain instructions aimed at the model. Archived content is prefixed with an untrusted-content notice.
 - **Output limits.** List tools return 25 rows by default and at most 100. Text output is capped at `ARCHIVR_MCP_MAX_OUTPUT_CHARS`.

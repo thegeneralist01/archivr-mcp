@@ -13,6 +13,7 @@ import {
   probeUrl,
   rearchiveEntry,
 } from "../../src/tools/capture";
+import { DESTRUCTIVE } from "../../src/tools/registry";
 import { callTool, directContext, jsonOf, textOf } from "../helpers/inMemory";
 import { installFakeClock, sequence, type FakeClock } from "../helpers/fakeClock";
 import { CANARY_TOKEN, MockApi, type RecordedRequest } from "../helpers/mockFetch";
@@ -412,16 +413,26 @@ describe("probes, titles and re-archive", () => {
     const { api, direct } = setup();
     api.on("POST", `/api/archives/${ARCHIVE}/entries/ent_t/rearchive`, { status: 202, json: { job_uid: "job_1", status: "pending" } });
     api.on("GET", JOBS, sequence([{ json: job("running") }, { json: job("completed") }]));
-    const result = await callTool(rearchiveEntry, { entry_uid: "ent_t" }, direct);
+    const result = await callTool(rearchiveEntry, { entry_uid: "ent_t", confirm: true }, direct);
     expect(jsonOf(result)).toMatchObject({ status: "completed", entry_uid: "ent_t" });
     expect(api.calls("POST", `/api/archives/${ARCHIVE}/entries/ent_t/rearchive`)).toHaveLength(1);
+  });
+
+  test("rearchive_entry is a destructive open-world tool and requires confirm: true", async () => {
+    expect(rearchiveEntry.annotations).toEqual({ ...DESTRUCTIVE, openWorldHint: true });
+    expect(rearchiveEntry.description).toContain("replace");
+    expect(rearchiveEntry.description).toContain("preserved");
+    const { api, direct } = setup();
+    await expect(callTool(rearchiveEntry, { entry_uid: "ent_t" }, direct)).rejects.toThrow();
+    await expect(callTool(rearchiveEntry, { entry_uid: "ent_t", confirm: false } as never, direct)).rejects.toThrow();
+    expect(api.requests).toHaveLength(0);
   });
 
   test("rearchive of a non-tweet surfaces the failed job as an error", async () => {
     const { api, direct } = setup();
     api.on("POST", `/api/archives/${ARCHIVE}/entries/ent_w/rearchive`, { status: 202, json: { job_uid: "job_1", status: "pending" } });
     api.on("GET", JOBS, { json: job("failed", { error_text: "entry is not a tweet" }) });
-    const result = await callTool(rearchiveEntry, { entry_uid: "ent_w" }, direct);
+    const result = await callTool(rearchiveEntry, { entry_uid: "ent_w", confirm: true }, direct);
     expect(result.isError).toBe(true);
     expect(textOf(result)).toContain("not a tweet");
   });

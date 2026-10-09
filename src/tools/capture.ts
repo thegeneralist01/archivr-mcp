@@ -18,7 +18,7 @@ import {
   waitForJob,
   waitInput,
 } from "./jobs";
-import { archiveInput, defineTool, openWorld, READ, WRITE, type ToolModule } from "./registry";
+import { archiveInput, confirmInput, defineTool, DESTRUCTIVE, openWorld, READ, WRITE, type ToolModule } from "./registry";
 
 // ── Shared pieces ───────────────────────────────────────────────────────────
 
@@ -243,15 +243,18 @@ export const rearchiveEntry = defineTool({
   name: "rearchive_entry",
   title: "Re-archive an entry",
   description:
-    "Re-fetch an existing tweet or tweet-thread entry and replace its archived content in place. Only tweet entries are supported " +
-    "(other kinds end as a failed job). If the scraper fails (tweet deleted or private) the existing archive is preserved. " +
+    "DESTRUCTIVE: re-fetch an existing tweet or tweet-thread entry from the network and, on success, replace the entry's archived " +
+    "artifacts (the raw tweet JSON files and their media) with the freshly scraped ones; the previous versions are no longer attached " +
+    "to the entry. Its uid, title, archived time, tags and collections stay. If the scraper fails (tweet deleted or private) the existing archived data is preserved unchanged. " +
+    "Only tweet entries are supported (other kinds end as a failed job). Requires confirm: true. " +
     WAIT_NOTE,
   toolset: "capture",
   minRole: "user",
-  annotations: openWorld(WRITE),
+  annotations: openWorld(DESTRUCTIVE),
   input: {
     ...archiveInput,
     entry_uid: z.string().min(1).describe("Tweet or tweet_thread entry to refresh"),
+    ...confirmInput,
     ...waitInput(CAPTURE_WAIT_S),
   },
   async handler(args, ctx) {
