@@ -1,4 +1,5 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test";
+import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -254,15 +255,17 @@ describe("capture_file", () => {
     expect(result.isError).toBeUndefined();
     expect(jsonOf(result)).toMatchObject({ status: "completed", entry_uids: ["ent_f"], uploaded: { filename: "note.txt", size: 12 } });
 
-    const file = uploaded?.form?.get("file");
-    expect(file).toBeInstanceOf(Blob);
-    expect(await (file as File).text()).toBe("hello upload");
-    // The wire filename must be the basename, never the local path (Bun keeps a BunFile's path otherwise).
-    const wire = await new Response(uploaded?.form).text();
-    expect(wire).toContain('filename="note.txt"');
-    expect(wire).not.toContain(root);
-    expect([...(uploaded?.form?.keys() ?? [])]).toEqual(["file"]);
-    expect(uploaded?.headers.get("content-type")).toBeNull(); // fetch sets the multipart boundary itself
+    // The body is a hand-built stream, not FormData; parse it back as multipart.
+    expect(uploaded?.form).toBeUndefined();
+    const contentType = uploaded?.headers.get("content-type") ?? "";
+    expect(contentType).toStartWith("multipart/form-data; boundary=");
+    expect(uploaded?.headers.get("content-length")).toBe(String(uploaded?.bodyBytes?.byteLength));
+    const form = await new Response(uploaded?.bodyBytes, { headers: { "content-type": contentType } }).formData();
+    expect([...form.keys()]).toEqual(["file"]);
+    const file = form.get("file") as File;
+    expect(file.name).toBe("note.txt"); // the basename, never the local path
+    expect(await file.text()).toBe("hello upload");
+    expect(new TextDecoder().decode(uploaded?.bodyBytes)).not.toContain(root);
     expect(api.calls("POST", CAPTURES)[0]?.json).toEqual({ locator: LOCATOR, quality: "best" });
     expect(api.calls("DELETE", UPLOADS)).toHaveLength(0);
   });
@@ -300,9 +303,19 @@ describe("capture_file", () => {
     expect(api.calls("DELETE", UPLOADS)).toHaveLength(0);
   });
 
-  test("enforces the 256 MiB capture_file cap", async () => {
-    const { MAX_UPLOAD_BYTES } = await import("../../src/tools/capture");
-    expect(MAX_UPLOAD_BYTES).toBe(256 * 1024 * 1024);
+  test("the size cap comes from config (ARCHIVR_MCP_MAX_UPLOAD_BYTES), not a constant", async () => {
+    const { api, direct } = setup({ config: { uploadRoots: [root], maxUploadBytes: 1024 } });
+    const over = await callTool(captureFile, { path: join(root, "big.bin") }, direct);
+    expect(over.isError).toBe(true);
+    expect(textOf(over)).toContain("2048 bytes, over the 1024 byte upload limit");
+    expect(api.requests).toHaveLength(0);
+
+    const roomy = setup({ config: { uploadRoots: [root], maxUploadBytes: 2048 } });
+    stage(roomy.api);
+    roomy.api.on("POST", CAPTURES, { status: 202, json: { job_uid: "job_1", status: "pending" } });
+    const ok = await callTool(captureFile, { path: join(root, "big.bin"), wait: false }, roomy.direct);
+    expect(ok.isError).toBeUndefined();
+    expect(roomy.api.calls("POST", UPLOADS)[0]?.bodyBytes?.byteLength).toBeGreaterThan(2048);
   });
 
   test("rejections never reach the network: outside roots, denylist, size cap, disabled", async () => {
@@ -326,21 +339,29 @@ describe("capture_file", () => {
     expect(none.api.requests).toHaveLength(0);
   });
 
-  test("sends a multi-MB file through a real fetch as byte-exact multipart", async () => {
-    const size = 24 * 1024 * 1024;
+  test("streams a 24 MB file through a real fetch as byte-exact multipart", async () => {
+    const size = 24 * 1024 * 1024 + 17;
+    const data = Buffer.alloc(size);
+    for (let i = 0; i < size; i += 1) data[i] = (i * 7 + (i >> 10)) & 0xff;
     const path = join(root, "large.bin");
-    await writeFile(path, Buffer.alloc(size, 7));
-    let received = 0;
+    await writeFile(path, data);
     let contentType = "";
+    let contentLength: string | null = null;
+    let fileName = "";
+    let fileHash = "";
+    let fileSize = -1;
     const server = Bun.serve({
       port: 0,
       async fetch(req) {
         const url = new URL(req.url);
         if (req.method === "POST" && url.pathname.endsWith("/uploads")) {
           contentType = req.headers.get("content-type") ?? "";
-          for await (const chunk of req.body as ReadableStream<Uint8Array>) {
-            received += chunk.byteLength;
-          }
+          contentLength = req.headers.get("content-length");
+          const form = await req.formData();
+          const file = form.get("file") as File;
+          fileName = file.name;
+          fileSize = file.size;
+          fileHash = createHash("sha256").update(new Uint8Array(await file.arrayBuffer())).digest("hex");
           return Response.json({ locator: LOCATOR, filename: "large.bin", size });
         }
         if (req.method === "POST") return Response.json({ job_uid: "job_1", status: "pending" }, { status: 202 });
@@ -351,17 +372,27 @@ describe("capture_file", () => {
       const client = new ArchivrClient({ baseUrl: `http://127.0.0.1:${server.port}`, token: CANARY_TOKEN, timeoutMs: 30_000 });
       const base = directContext({ config: { archive: ARCHIVE, uploadRoots: [root] } }).base;
       const ctx = toToolContext({ ...base, client }, { signal: new AbortController().signal });
-      const result = await captureFile.execute(
-        { path, wait: false, wait_timeout_s: 1 },
-        ctx,
-      );
+      const result = await captureFile.execute({ path, wait: false, wait_timeout_s: 1 }, ctx);
       expect(jsonOf(result)).toMatchObject({ status: "pending", job_uid: "job_1" });
       expect(contentType).toStartWith("multipart/form-data; boundary=");
-      expect(received).toBeGreaterThanOrEqual(size);
-      expect(received).toBeLessThan(size + 4096);
+      expect(Number(contentLength)).toBeGreaterThan(size);
+      expect(Number(contentLength)).toBeLessThan(size + 1024);
+      expect(fileName).toBe("large.bin");
+      expect(fileSize).toBe(size);
+      expect(fileHash).toBe(createHash("sha256").update(data).digest("hex"));
     } finally {
       await server.stop(true);
     }
+  });
+
+  test("an upload failure is reported and no capture is attempted", async () => {
+    const { api, direct } = setup({ config: { uploadRoots: [root] } });
+    api.on("POST", UPLOADS, { status: 413, json: { error: "too large" } });
+    const result = await callTool(captureFile, { path: join(root, "note.txt") }, direct);
+    expect(result.isError).toBe(true);
+    expect(textOf(result)).toContain("Payload too large");
+    expect(api.calls("POST", CAPTURES)).toHaveLength(0);
+    expect(api.calls("DELETE", UPLOADS)).toHaveLength(0);
   });
 });
 

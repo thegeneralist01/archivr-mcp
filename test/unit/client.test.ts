@@ -67,6 +67,37 @@ describe("ArchivrClient", () => {
     expect(api.requests[3]?.headers.get("range")).toBe("bytes=100-");
   });
 
+  test("sends a streaming body with the given Content-Type and Content-Length", async () => {
+    let init: (RequestInit & { duplex?: string }) | undefined;
+    const client = new ArchivrClient({
+      baseUrl: "http://archivr.test",
+      token: CANARY_TOKEN,
+      timeoutMs: 1000,
+      fetch: async (_input, i) => {
+        init = i;
+        return new Response("{}", { headers: { "content-type": "application/json" } });
+      },
+    });
+    const stream = () => new Blob(["abc", "def"]).stream();
+    await client.request("POST", "/api/up", { body: { stream: stream(), contentType: "multipart/form-data; boundary=B", contentLength: 6 } });
+    const headers = new Headers(init?.headers);
+    expect(headers.get("content-type")).toBe("multipart/form-data; boundary=B");
+    expect(headers.get("content-length")).toBe("6");
+    expect(headers.get("authorization")).toBe(`Bearer ${CANARY_TOKEN}`);
+    expect(init?.body).toBeInstanceOf(ReadableStream);
+    expect(init?.duplex).toBe("half");
+
+    await client.request("POST", "/api/up", { body: { stream: stream(), contentType: "application/octet-stream" } });
+    expect(new Headers(init?.headers).has("content-length")).toBe(false);
+  });
+
+  test("a streaming body cannot be combined with json or form", async () => {
+    const client = new MockApi().client();
+    const body = { stream: new Blob(["x"]).stream(), contentType: "text/plain" };
+    await expect(client.request("POST", "/x", { body, json: {} })).rejects.toThrow("only one of");
+    await expect(client.request("POST", "/x", { body, form: new FormData() })).rejects.toThrow("only one of");
+  });
+
   test("decodes JSON, text, binary and empty bodies", async () => {
     const api = new MockApi()
       .on("GET", "/j", { json: { a: 1 } })

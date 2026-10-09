@@ -11,6 +11,8 @@ export const DEFAULT_TOOLSETS: readonly Toolset[] = ["core", "capture", "organiz
 
 export const DEFAULT_MAX_OUTPUT_CHARS = 40_000;
 export const DEFAULT_TIMEOUT_MS = 30_000;
+/** Default cap for one capture_file upload. Archivr itself accepts up to 10 GiB per request. */
+export const DEFAULT_MAX_UPLOAD_BYTES = 2 * 1024 * 1024 * 1024;
 
 export interface Config {
   /** Base URL of the Archivr server, no trailing slash, no credentials. */
@@ -25,6 +27,8 @@ export interface Config {
   readonly timeoutMs: number;
   /** Directories `capture_file` may read from. Empty = file uploads disabled. */
   readonly uploadRoots: readonly string[];
+  /** Largest file `capture_file` will upload, in bytes. */
+  readonly maxUploadBytes: number;
   readonly downloadDir: string;
   readonly logLevel: LogLevel;
 }
@@ -57,7 +61,7 @@ const positiveInt = (name: string) =>
     .trim()
     .regex(/^\d+$/, { error: `${name} must be a positive integer` })
     .transform(Number)
-    .pipe(z.number().int().positive({ error: `${name} must be a positive integer` }));
+    .pipe(z.number().int().safe().positive({ error: `${name} must be a positive integer` }));
 
 const urlSchema = z
   .string()
@@ -139,6 +143,12 @@ export function loadConfig(env: Env = process.env): Config {
     env["ARCHIVR_MCP_TIMEOUT_MS"],
     DEFAULT_TIMEOUT_MS,
   );
+  const maxUploadBytes = field(
+    positiveInt("ARCHIVR_MCP_MAX_UPLOAD_BYTES"),
+    "ARCHIVR_MCP_MAX_UPLOAD_BYTES",
+    env["ARCHIVR_MCP_MAX_UPLOAD_BYTES"],
+    DEFAULT_MAX_UPLOAD_BYTES,
+  );
   const logLevel = field(
     z.string().trim().toLowerCase().pipe(z.enum(LOG_LEVELS, { error: `must be one of ${LOG_LEVELS.join(", ")}` })),
     "ARCHIVR_MCP_LOG",
@@ -169,6 +179,7 @@ export function loadConfig(env: Env = process.env): Config {
     maxOutputChars: maxOutputChars ?? DEFAULT_MAX_OUTPUT_CHARS,
     timeoutMs: timeoutMs ?? DEFAULT_TIMEOUT_MS,
     uploadRoots,
+    maxUploadBytes: maxUploadBytes ?? DEFAULT_MAX_UPLOAD_BYTES,
     downloadDir,
     logLevel: logLevel ?? "warn",
   };

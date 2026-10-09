@@ -14,6 +14,18 @@ export type QueryValue = string | number | boolean | undefined | null;
 /** How to decode a successful response body. `auto` picks by Content-Type. */
 export type ResponseKind = "auto" | "json" | "text" | "binary";
 
+/**
+ * A request body that is read lazily and never held in memory as a whole (large uploads).
+ * The stream can be consumed only once, so a request with it is never retried.
+ */
+export interface StreamingBody {
+  stream: ReadableStream<Uint8Array>;
+  /** Sent as the Content-Type header (e.g. `multipart/form-data; boundary=...`). */
+  contentType: string;
+  /** Exact body length. Sent as Content-Length; when omitted the body goes out chunked. */
+  contentLength?: number;
+}
+
 export interface RequestOptions<T = unknown> {
   /** Query parameters; undefined/null values are skipped. */
   query?: Record<string, QueryValue>;
@@ -21,6 +33,8 @@ export interface RequestOptions<T = unknown> {
   json?: unknown;
   /** Multipart request body (uploads). Content-Type is set by fetch. */
   form?: FormData;
+  /** Streaming request body (large uploads). Mutually exclusive with `json` and `form`. */
+  body?: StreamingBody;
   /** Sends `Range: bytes=start-end` (end optional = to EOF). */
   range?: { start: number; end?: number };
   signal?: AbortSignal;
@@ -138,8 +152,14 @@ export class ArchivrClient {
       Accept: "application/json, text/plain;q=0.9, */*;q=0.5",
       "User-Agent": this.#userAgent,
     });
-    let body: string | FormData | undefined;
-    if (options.json !== undefined) {
+    const bodyKinds = [options.json, options.form, options.body].filter((b) => b !== undefined).length;
+    if (bodyKinds > 1) throw new Error("pass only one of json, form and body");
+    let body: string | FormData | ReadableStream<Uint8Array> | undefined;
+    if (options.body !== undefined) {
+      headers.set("Content-Type", options.body.contentType);
+      if (options.body.contentLength !== undefined) headers.set("Content-Length", String(options.body.contentLength));
+      body = options.body.stream;
+    } else if (options.json !== undefined) {
       headers.set("Content-Type", "application/json");
       body = JSON.stringify(options.json);
     } else if (options.form !== undefined) {
@@ -180,6 +200,8 @@ export class ArchivrClient {
         method: method.toUpperCase(),
         headers,
         ...(body === undefined ? {} : { body }),
+        // Required by spec (and by Node's fetch) for a stream body; Bun sends it without.
+        ...(body instanceof ReadableStream ? { duplex: "half" } : {}),
         signal: controller.signal,
         redirect: "manual",
       });

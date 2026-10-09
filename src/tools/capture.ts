@@ -10,6 +10,7 @@ import {
   UploadResultSchema,
 } from "../client/schemas";
 import { resolveUploadFile } from "../lib/files";
+import { openMultipartFile } from "../lib/multipart";
 import { jsonResult } from "../lib/output";
 import type { ToolContext } from "./context";
 import {
@@ -25,11 +26,6 @@ import { archiveInput, confirmInput, defineTool, DESTRUCTIVE, openWorld, READ, W
 export const MAX_TEXT_BYTES = 2 * 1024 * 1024;
 /** Uploads can be large; the request timeout covers the whole transfer. */
 const UPLOAD_TIMEOUT_MS = 15 * 60 * 1000;
-/**
- * Cap for capture_file. Bun buffers multipart file parts in memory (see capture_file), so the
- * generic 2 GiB upload default is too high until the client can stream a request body.
- */
-export const MAX_UPLOAD_BYTES = 256 * 1024 * 1024;
 /** yt-dlp metadata probes can take a while. */
 const PROBE_TIMEOUT_MS = 3 * 60 * 1000;
 
@@ -195,7 +191,8 @@ export const captureFile = defineTool({
   title: "Capture a local file",
   description:
     "Upload a file from the machine running this MCP server and archive it. The path must be absolute, inside " +
-    "ARCHIVR_MCP_UPLOAD_ROOTS, not on the sensitive-file denylist (keys, .env, credentials) and at most 256 MiB. " +
+    "ARCHIVR_MCP_UPLOAD_ROOTS, not on the sensitive-file denylist (keys, .env, credentials) and within the configured size limit " +
+    "(ARCHIVR_MCP_MAX_UPLOAD_BYTES, default 2 GiB). The file is streamed, not loaded into memory. " +
     "The file is uploaded to Archivr as a staged upload, then captured; if the capture request fails the staged upload is deleted. " +
     WAIT_NOTE,
   toolset: "capture",
@@ -208,22 +205,34 @@ export const captureFile = defineTool({
     ...waitInput(CAPTURE_WAIT_S),
   },
   async handler(args, ctx) {
-    const file = await resolveUploadFile(args.path, { roots: ctx.config.uploadRoots, maxBytes: MAX_UPLOAD_BYTES });
+    const file = await resolveUploadFile(args.path, { roots: ctx.config.uploadRoots, maxBytes: ctx.config.maxUploadBytes });
     const archive = await ctx.archive(args);
-    const form = new FormData();
-    // A Bun.file() part keeps its full path as its wire filename, even when wrapped in
-    // `new File([source], name)` (Bun 1.3.14), which leaks the local path to the server. Slicing
-    // gives a plain Blob, so the explicit basename passed to append() is what goes on the wire.
-    // Measured with Bun 1.3: fetch() buffers FormData file parts in memory (about 2x the file
-    // size), unlike a pull-based ReadableStream body. That is why MAX_UPLOAD_BYTES is modest.
-    const source = Bun.file(file.realPath);
-    form.append("file", source.slice(0, source.size, source.type), file.name);
-    const uploadsPath = `/api/archives/${seg(archive)}/uploads`;
-    const upload = await ctx.client.request("POST", uploadsPath, {
-      form,
-      schema: UploadResultSchema,
-      timeoutMs: UPLOAD_TIMEOUT_MS,
+    // Hand-built multipart body streamed from disk (see lib/multipart.ts): Bun would buffer a
+    // FormData file part entirely in memory. Only the basename is sent as the filename.
+    const multipart = await openMultipartFile({
+      path: file.realPath,
+      size: file.size,
+      fileName: file.name,
+      contentType: Bun.file(file.realPath).type,
     });
+    const uploadsPath = `/api/archives/${seg(archive)}/uploads`;
+    let upload;
+    try {
+      upload = await ctx.client.request("POST", uploadsPath, {
+        body: {
+          stream: multipart.stream,
+          contentType: multipart.contentType,
+          contentLength: multipart.contentLength,
+        },
+        schema: UploadResultSchema,
+        timeoutMs: UPLOAD_TIMEOUT_MS,
+      });
+    } catch (error) {
+      // A read failure mid-upload surfaces from fetch as a generic network error; report the real cause.
+      throw multipart.failure() ?? error;
+    } finally {
+      await multipart.dispose();
+    }
     let accepted;
     try {
       accepted = await postCapture(ctx, capturesPath(archive), captureBody(upload.locator, args));

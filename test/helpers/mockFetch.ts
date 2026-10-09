@@ -1,5 +1,5 @@
 import { ArchivrClient, type FetchLike } from "../../src/client/http";
-import { DEFAULT_MAX_OUTPUT_CHARS, DEFAULT_TIMEOUT_MS, DEFAULT_TOOLSETS, type Config } from "../../src/config";
+import { DEFAULT_MAX_OUTPUT_CHARS, DEFAULT_MAX_UPLOAD_BYTES, DEFAULT_TIMEOUT_MS, DEFAULT_TOOLSETS, type Config } from "../../src/config";
 
 /** A distinctive token used by tests: it must never appear in any error, log or result. */
 export const CANARY_TOKEN = "arch_CANARY_token_0123456789abcdef";
@@ -18,6 +18,8 @@ export interface RecordedRequest {
   /** Parsed JSON body, if any. */
   json: unknown;
   form: FormData | undefined;
+  /** Fully read streaming request body (uploads sent as a ReadableStream), if any. */
+  bodyBytes: Uint8Array | undefined;
   /** `:name` captures from the matched route pattern. */
   params: Record<string, string>;
   signal: AbortSignal | undefined;
@@ -91,6 +93,7 @@ export class MockApi {
       bodyText,
       json: bodyText === undefined ? undefined : (JSON.parse(bodyText) as unknown),
       form: body instanceof FormData ? body : undefined,
+      bodyBytes: body instanceof ReadableStream ? new Uint8Array(await new Response(body).arrayBuffer()) : undefined,
       params: {},
       signal: init?.signal ?? undefined,
     };
@@ -149,6 +152,7 @@ export function testConfig(overrides: Partial<Config> = {}): Config {
     maxOutputChars: DEFAULT_MAX_OUTPUT_CHARS,
     timeoutMs: DEFAULT_TIMEOUT_MS,
     uploadRoots: [],
+    maxUploadBytes: DEFAULT_MAX_UPLOAD_BYTES,
     downloadDir: "/tmp/archivr-mcp-test-downloads",
     logLevel: "off",
     ...overrides,

@@ -82,6 +82,16 @@ describe("loadConfig", () => {
     expect(issuesOf({ ...base, ARCHIVR_MCP_LOG: "loud" }).join()).toContain("ARCHIVR_MCP_LOG");
   });
 
+  test("ARCHIVR_MCP_MAX_UPLOAD_BYTES defaults to 2 GiB and is validated", () => {
+    expect(loadConfig(base).maxUploadBytes).toBe(2 * 1024 * 1024 * 1024);
+    expect(loadConfig({ ...base, ARCHIVR_MCP_MAX_UPLOAD_BYTES: "" }).maxUploadBytes).toBe(2 * 1024 * 1024 * 1024);
+    expect(loadConfig({ ...base, ARCHIVR_MCP_MAX_UPLOAD_BYTES: " 5000000000 " }).maxUploadBytes).toBe(5_000_000_000);
+    for (const bad of ["0", "-1", "1.5", "2GiB", "abc", "99999999999999999999"]) {
+      const issues = issuesOf({ ...base, ARCHIVR_MCP_MAX_UPLOAD_BYTES: bad }).join();
+      expect(issues, bad).toContain("ARCHIVR_MCP_MAX_UPLOAD_BYTES");
+    }
+  });
+
   test("splits upload roots on the path delimiter", () => {
     const config = loadConfig({ ...base, ARCHIVR_MCP_UPLOAD_ROOTS: "/data/a:/data/b" });
     if (process.platform !== "win32") expect(config.uploadRoots).toEqual(["/data/a", "/data/b"]);

@@ -2,9 +2,8 @@ import { constants } from "node:fs";
 import { mkdir, open, realpath, stat } from "node:fs/promises";
 import { basename, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { ToolUserError } from "../client/errors";
+import { DEFAULT_MAX_UPLOAD_BYTES } from "../config";
 
-/** Default cap for one upload (the server accepts up to 10 GiB; models rarely need that). */
-export const DEFAULT_MAX_UPLOAD_BYTES = 2 * 1024 * 1024 * 1024;
 
 /** Directory names that never get uploaded, wherever they appear in the path. */
 const DENIED_DIRS = new Set([
