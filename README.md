@@ -147,7 +147,7 @@ Columns: **Role** is the minimum role for the tool to be shown. The server still
 | `update_collection` | user | write | Change a collection's name, default visibility bits and/or `requires_auth`. |
 | `add_to_collection` | user | write | Add an entry to a collection with per-entry visibility bits (no change if already a member). |
 | `remove_from_collection` | user | write | Remove an entry from a collection. |
-| `set_entry_visibility` | user | write | Change the visibility bits of an entry already in a collection. |
+| `set_entry_visibility` | user | write | Change the visibility bits of an entry already in a collection. A non-admin cannot hide an entry from all of their own roles. |
 | `delete_collection` | user | destructive | Permanently delete a collection and its memberships. |
 
 ### Account (5 tools, default on)

@@ -210,8 +210,8 @@ describe.skipIf(E2E_DISABLED)("e2e: instance settings, effective config, archive
     expect(await runs(a)).toContain(runUid);
     expect(await runs(b)).toContain(runUid);
 
-    // Restrict the entry to admins: B loses the entry and the run, A (the creator) and admins keep the run.
-    expect((await a.call("set_entry_visibility", { collection_uid: "coll_default", entry_uid: entryUid, visibility_bits: 4 })).isError).toBe(false);
+    // An admin restricts the entry to admins: B loses the entry and the run, A (the creator) and admins keep the run.
+    expect((await admin.call("set_entry_visibility", { collection_uid: "coll_default", entry_uid: entryUid, visibility_bits: 4 })).isError).toBe(false);
     expect(obj(await b.call("list_entries", {}))["items"].map((e: { entry_uid: string }) => e.entry_uid)).not.toContain(entryUid);
     expect(await runs(b)).not.toContain(runUid);
     expect(await runs(a)).toContain(runUid);

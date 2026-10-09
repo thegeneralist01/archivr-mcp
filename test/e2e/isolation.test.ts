@@ -332,21 +332,31 @@ describe.skipIf(E2E_DISABLED)("e2e isolation checklist", () => {
     expect(dup.text).not.toContain("dup-user-password-1");
   });
 
-  // ── known gaps (server), documented rather than patched ───────────────────
+  // ── entry visibility by uid ───────────────────────────────────────────────
 
-  // BUG (archivr-server, reported, not patched here): once an entry is hidden from a user's role
-  // (collection visibility), list/search/runs hide it, but fetching it BY UID still succeeds:
-  // GET entries/:uid, .../artifacts/:index and /blobs/:sha256 return 200 with the content. The plan
-  // lists artifact and blob endpoints as a known gap; the entry-detail endpoint has it too.
-  test.skip("KNOWN SERVER GAP: a hidden entry is still readable by uid (expected 404/403 for user2)", async () => {
+  // Once an entry is hidden from a user's role (collection visibility), every by-uid endpoint must
+  // answer 404 as if it did not exist, while admins and the entry's visible audience still read it.
+  test("isolation: a hidden entry is a 404 on every by-uid endpoint for a user without access", async () => {
     const a = await fx.mcp(fx.cast.user.token);
     const entry: string = obj(await a.call("capture_text", { title: "Hidden", body: "private", wait: true })).entry_uids[0];
-    await a.call("set_entry_visibility", { collection_uid: "coll_default", entry_uid: entry, visibility_bits: 4 });
     const base = `/api/archives/${ARCHIVE_ID}/entries/${entry}`;
-    expect([403, 404]).toContain((await rest("GET", base, tok(fx.cast.user2))).status);
-    expect([403, 404]).toContain((await rest("GET", `${base}/artifacts/0`, tok(fx.cast.user2))).status);
+    expect((await rest("GET", base, tok(fx.cast.user2))).status).toBe(200);
+
+    // A plain user cannot hide an entry from all of their own roles (they could never undo it)...
+    const lockout = await a.call("set_entry_visibility", { collection_uid: "coll_default", entry_uid: entry, visibility_bits: 4 });
+    expect(lockout.isError).toBe(true);
+    expect(lockout.text).toContain("hide the entry from all of your own roles");
+    expect((await rest("GET", base, tok(fx.cast.user2))).status).toBe(200);
+
+    // ...an admin can.
+    const admin = await fx.mcp(fx.cast.admin.token);
+    expect((await admin.call("set_entry_visibility", { collection_uid: "coll_default", entry_uid: entry, visibility_bits: 4 })).isError).toBe(false);
+    for (const suffix of ["", "/artifacts/0", "/summary", "/tags", "/collections"]) {
+      const res = await rest("GET", base + suffix, tok(fx.cast.user2));
+      expect(res.status, `GET ${suffix || "entry"}`).toBe(404);
+    }
+    expect((await rest("GET", base, tok(fx.cast.admin))).status).toBe(200);
   });
-  test.todo("server: enforce collection visibility on GET entry, artifact and blob by uid/sha", () => {});
 
   // ── last: nothing leaked across the whole run ─────────────────────────────
 

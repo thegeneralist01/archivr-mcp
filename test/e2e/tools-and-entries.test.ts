@@ -263,12 +263,16 @@ describe.skipIf(E2E_DISABLED)("e2e: tools, entries, capture, tags, collections",
     const got = obj(await user.call("get_collection", { collection_uid: collUid }));
     expect(JSON.stringify(got)).toContain(entryUid);
 
-    // Hide the entry from plain users in the default collection and in this one: user2 stops seeing it.
-    expect((await user.call("set_entry_visibility", { collection_uid: "coll_default", entry_uid: entryUid, visibility_bits: 4 })).isError).toBe(false);
-    expect((await user.call("set_entry_visibility", { collection_uid: collUid, entry_uid: entryUid, visibility_bits: 4 })).isError).toBe(false);
+    // A plain user cannot hide the entry from all of their own roles (they could never undo it);
+    // an admin hides it from plain users in both collections and user2 stops seeing it.
+    const admin = await fx.mcp(fx.cast.admin.token);
+    expect((await admin.call("set_entry_visibility", { collection_uid: collUid, entry_uid: entryUid, visibility_bits: 4 })).isError).toBe(false);
+    const lockout = await user.call("set_entry_visibility", { collection_uid: "coll_default", entry_uid: entryUid, visibility_bits: 4 });
+    expect(lockout.isError).toBe(true);
+    expect((await admin.call("set_entry_visibility", { collection_uid: "coll_default", entry_uid: entryUid, visibility_bits: 4 })).isError).toBe(false);
     const hidden = obj(await other.call("list_entries", {}));
     expect(hidden["items"].map((i: { entry_uid: string }) => i.entry_uid)).not.toContain(entryUid);
-    expect((await user.call("set_entry_visibility", { collection_uid: "coll_default", entry_uid: entryUid, visibility_bits: 2 })).isError).toBe(false);
+    expect((await admin.call("set_entry_visibility", { collection_uid: "coll_default", entry_uid: entryUid, visibility_bits: 2 })).isError).toBe(false);
     const shown = obj(await other.call("list_entries", {}));
     expect(shown["items"].map((i: { entry_uid: string }) => i.entry_uid)).toContain(entryUid);
 

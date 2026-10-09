@@ -12,7 +12,7 @@
     "dev": "bun --watch src/index.ts",
     "start": "bun src/index.ts",
     "test": "bun test test/unit",
-    "test:e2e": ": \"${ARCHIVR_SERVER_BIN:?set ARCHIVR_SERVER_BIN to a built archivr-server}\" && : \"${ARCHIVR_CLI_BIN:?set ARCHIVR_CLI_BIN to a built archivr CLI}\" && bun test test/e2e",
+    "test:e2e": ": \"${ARCHIVR_SERVER_BIN:?set ARCHIVR_SERVER_BIN to a built archivr-server}\" && : \"${ARCHIVR_CLI_BIN:?set ARCHIVR_CLI_BIN to a built archivr CLI}\" && bun test --timeout 60000 test/e2e",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

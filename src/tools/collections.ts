@@ -179,7 +179,8 @@ export const setEntryVisibility = defineTool({
   title: "Set entry visibility in collection",
   description:
     "Change the visibility bits of an entry that is already in a collection. The entry must be a member " +
-    `(otherwise 404; use add_to_collection first). ${VISIBILITY_HELP}`,
+    "(otherwise 404; use add_to_collection first). Only admins may hide an entry from every role they hold themselves: " +
+    `a non-admin change that would leave the entry invisible to the caller is refused (400). ${VISIBILITY_HELP}`,
   toolset: "organize",
   minRole: "user",
   annotations: { ...WRITE, idempotentHint: true },
