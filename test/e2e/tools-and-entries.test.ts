@@ -191,12 +191,11 @@ describe.skipIf(E2E_DISABLED)("e2e: tools, entries, capture, tags, collections",
     expect(JSON.stringify(jobs)).not.toContain("/etc/hosts");
   });
 
-  // BUG (archivr-server, reported, not patched here): the guard only looks at the `file://` scheme.
-  // A bare absolute path locator ("/etc/hosts", "/home/x/notes.txt") is treated as a local-file
-  // capture, so a USER can archive and then read back any file the server process can read
-  // (verified: a text file outside the archive came back through get_artifact). Mixed-case
-  // `FILE://` and `file:/path` are accepted with 202 too, but those jobs fail later ("not yet implemented").
-  test.skip("KNOWN SERVER BUG: a bare absolute-path locator bypasses the file:// guard (expected 400)", async () => {
+  // Regression: core classifies any existing path as a local file, so the server must refuse
+  // bare paths as well as non-staged file:// URIs, otherwise a USER could archive and read back
+  // any file the server process can read. (Mixed-case `FILE://` and `file:/path` are accepted
+  // with 202 but their jobs fail later with "not yet implemented", so they read nothing.)
+  test("a bare absolute-path locator is rejected like a non-staged file:// one", async () => {
     const secret = join(fx.workDir, "server-side-secret.txt");
     writeFileSync(secret, "TOP-SECRET-CONTENT");
     const raw = await fx.server.rest("POST", `/api/archives/${ARCHIVE_ID}/captures`, {
@@ -204,8 +203,8 @@ describe.skipIf(E2E_DISABLED)("e2e: tools, entries, capture, tags, collections",
       body: { locator: secret },
     });
     expect(raw.status).toBe(400);
+    expect(raw.text).not.toContain("TOP-SECRET-CONTENT");
   });
-  test.todo("server: reject non-URL, non-staged locators (bare paths, file:/x, FILE://) in POST captures", () => {});
 
   // ── 4. tags and collections ───────────────────────────────────────────────
 
