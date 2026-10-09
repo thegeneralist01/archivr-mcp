@@ -205,7 +205,7 @@ describe.skipIf(E2E_DISABLED)("e2e: tools, entries, capture, tags, collections",
     });
     expect(raw.status).toBe(400);
   });
-  test.todo("server: reject non-URL, non-staged locators (bare paths, file:/x, FILE://) in POST captures");
+  test.todo("server: reject non-URL, non-staged locators (bare paths, file:/x, FILE://) in POST captures", () => {});
 
   // ── 4. tags and collections ───────────────────────────────────────────────
 
