@@ -226,6 +226,8 @@ When a wait runs out, the tool returns `{"status": "running", "job_uid": ...}`. 
 
 A staged upload is deleted if the capture fails.
 
+`capture_url` refuses `file:` locators. The Archivr server also refuses any `file://` locator that is not a staged upload, and any bare path locator, so local files can only reach an archive through `capture_file`.
+
 **Downloads (`download_artifact`).** The file is written into `ARCHIVR_MCP_DOWNLOAD_DIR`. The name is reduced to a safe basename, and `dest_dir` must stay inside the download directory. The file is created exclusively, so an existing name gets a `-N` suffix unless `overwrite: true` is given. Files are created with mode 0600. There is no size limit.
 
 **Reads (`get_artifact`).** Returns up to 64 KiB by default and at most 1 MiB per call, using HTTP Range. Images up to 1 MiB come back as images. Other binary content returns only its type and size. Use `download_artifact` for the whole file.
