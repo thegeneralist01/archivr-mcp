@@ -31,7 +31,8 @@ Claude Code configuration.
 ## Development
 
 ```sh
-bun test            # unit tests (mocked fetch, InMemoryTransport)
+bun test            # unit tests (mocked fetch, InMemoryTransport); e2e suites skip themselves
+bun run test:e2e    # e2e against a real archivr-server (see test/e2e/README.md)
 bun run typecheck
 ```
 
