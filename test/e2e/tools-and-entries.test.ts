@@ -152,6 +152,25 @@ describe.skipIf(E2E_DISABLED)("e2e: tools, entries, capture, tags, collections",
     expect(artifact.text).toContain("local file body e2e");
   });
 
+  test("capture_file streams a ~50 MB file through the real server and archives it byte-exact", async () => {
+    const root = join(fx.workDir, "uploads-large");
+    mkdirSync(root, { recursive: true });
+    const file = join(root, "large-upload.bin");
+    const size = 50 * 1024 * 1024 + 321;
+    const data = Buffer.alloc(size);
+    for (let i = 0; i < size; i += 1) data[i] = (i * 13 + (i >> 12)) & 0xff;
+    writeFileSync(file, data);
+    const user = await fx.mcp(fx.cast.user.token, { uploadRoots: [root] });
+    const out = obj(await user.call("capture_file", { path: file, wait: true, wait_timeout_s: 120 }));
+    expect(out["status"]).toBe("completed");
+    expect(out["uploaded"]).toMatchObject({ filename: "large-upload.bin", size });
+    expect(out["uploaded"]["filename"]).not.toContain(fx.workDir);
+    expect(out["entry_uids"]).toHaveLength(1);
+    const entry = obj(await user.call("get_entry", { entry_uid: out["entry_uids"][0], include: ["artifacts"] }));
+    expect(entry["source_kind"]).toBe("local");
+    expect(JSON.stringify(entry)).toContain("large-upload.bin");
+  }, 180_000);
+
   test("capture_file rejects denylisted, outside-root and symlink-escape paths; no roots disables uploads", async () => {
     const root = join(fx.workDir, "uploads2");
     mkdirSync(join(root, ".ssh"), { recursive: true });

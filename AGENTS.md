@@ -17,10 +17,10 @@ E2E needs `ARCHIVR_SERVER_BIN` and `ARCHIVR_CLI_BIN`, pointing at an `archivr-se
 ## Layout
 
 - `src/index.ts` startup; `src/server.ts` `createServer(config, client)` (transport-agnostic); `src/transport/stdio.ts` is the only file that imports the stdio transport.
-- `src/config.ts` zod-validated env (`ARCHIVR_URL`, `ARCHIVR_TOKEN`, `ARCHIVR_ARCHIVE`, `ARCHIVR_MCP_*`). Errors name variables, never values.
+- `src/config.ts` zod-validated env (`ARCHIVR_URL`, `ARCHIVR_TOKEN`, `ARCHIVR_ARCHIVE`, `ARCHIVR_MCP_*`, including `ARCHIVR_MCP_MAX_UPLOAD_BYTES`, default 2 GiB, the `capture_file` size cap). Errors name variables, never values.
 - `src/client/` `ArchivrClient` (injectable `fetch`, timeouts, Bearer auth), `errors.ts` (status → tool error mapping), `polling.ts` (`pollUntil`), `schemas.ts` (zod shapes of REST responses).
 - `src/tools/` one module per group, each exporting a `() => ToolDef[]`, composed in `index.ts`. `registry.ts` has `defineTool`, filtering, redaction and truncation; `context.ts` has `ToolContext`.
-- `src/lib/` `files.ts` (upload/download path safety), `html.ts`, `output.ts`, `redact.ts`, `roles.ts` (GUEST=1 USER=2 ADMIN=4 OWNER=8), `log.ts`.
+- `src/lib/` `files.ts` (upload/download path safety), `multipart.ts` (streaming multipart upload body), `html.ts`, `output.ts`, `redact.ts`, `roles.ts` (GUEST=1 USER=2 ADMIN=4 OWNER=8), `log.ts`.
 - `src/resources/index.ts` MCP resources (tools stay primary).
 - `docs/api-contract.md` REST contract summary. The authoritative spec is `docs/superpowers/specs/2026-10-08-mcp-api-extensions.md` in the Archivr repo.
 
@@ -47,7 +47,7 @@ E2E needs `ARCHIVR_SERVER_BIN` and `ARCHIVR_CLI_BIN`, pointing at an `archivr-se
 ## Quirks worth knowing
 
 - SDK `registerTool` calls the handler as `(extra)` instead of `(args, extra)` when `inputSchema` is undefined, hence the rule above.
-- Bun does not stream `FormData` file parts: a 200 MB `Bun.file()` grew RSS by about 425 MB. `capture_file` is capped at 256 MiB and wraps the file in `new File([...], basename)` so the local path is not sent as the filename. Streaming bodies would need a change in `client/http.ts`.
+- Bun buffers `FormData` file parts (a 200 MB `Bun.file()` grew RSS by about 425 MB), so `capture_file` does not use `FormData`. `lib/multipart.ts` builds the multipart envelope by hand and streams the file in 1 MiB pull-based chunks through `ArchivrClient`'s `body: {stream, contentType, contentLength}` option (RSS growth for a 300 MB upload is about 50 MB, independent of file size). With an explicit `Content-Length` Bun sends an identity body, without it chunked; `duplex: "half"` is passed for spec-compliant fetches. A stream body can be read once, so such requests are never retried. The wire filename is the basename only, with `"`, CR and LF percent-encoded. The cap is `ARCHIVR_MCP_MAX_UPLOAD_BYTES` (default 2 GiB).
 - `search_entries` `tag` filters on the full path (`/dev/rust`); the tool adds the leading slash.
 - Archivr's login rate limit is 5 per IP per 15 min. The e2e harness sends a unique `X-Forwarded-For` per login (trusted from loopback).
 - Poll timing is injected in tests through the `pollHooks` export in `src/tools/jobs.ts` (`ToolContext` has no sleep hook).

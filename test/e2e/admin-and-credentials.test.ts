@@ -170,10 +170,11 @@ describe.skipIf(E2E_DISABLED)("e2e: user lifecycle, tokens and sessions", () => 
     const res = await mcp.call("capture_text", { title: "blocked", body: "blocked" });
     expect(res.isError).toBe(true);
     expect(res.text).toContain("403");
-    expect(res.text).toContain("read-only token");
+    expect(res.text).toContain("read scope");
+    expect(res.text).toContain("cannot modify anything");
     const tag = await mcp.call("create_tag", { path: "blocked" });
     expect(tag.isError).toBe(true);
-    expect(tag.text).toContain("read-only token");
+    expect(tag.text).toContain("read scope");
 
     // ARCHIVR_MCP_READONLY hides the mutating tools for a full token too.
     const ro = await fx.mcp(fx.cast.user.token, { readonly: true });

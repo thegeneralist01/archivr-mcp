@@ -72,6 +72,7 @@ If Claude Desktop cannot find `bun` on its PATH, use the absolute path to the bu
 | `ARCHIVR_MCP_MAX_OUTPUT_CHARS` | `40000` | Cap on the text returned from one tool call. Longer output is truncated |
 | `ARCHIVR_MCP_TIMEOUT_MS` | `30000` | Per-request HTTP timeout to the Archivr server |
 | `ARCHIVR_MCP_UPLOAD_ROOTS` | none | Path-delimiter-separated directories that `capture_file` may read. `~` is expanded. Empty disables uploads |
+| `ARCHIVR_MCP_MAX_UPLOAD_BYTES` | `2147483648` (2 GiB) | Largest file `capture_file` will upload, in bytes. Positive integer. Archivr itself accepts up to 10 GiB per upload |
 | `ARCHIVR_MCP_DOWNLOAD_DIR` | `$TMPDIR/archivr-mcp-downloads` | Directory `download_artifact` writes into |
 | `ARCHIVR_MCP_LOG` | `warn` | `off`, `error`, `warn`, `info` or `debug`. Stderr only |
 
@@ -219,10 +220,12 @@ When a wait runs out, the tool returns `{"status": "running", "job_uid": ...}`. 
 
 ## Uploads and downloads
 
-**Uploads (`capture_file`).** A file is accepted only if its real path (symlinks resolved) is inside one of the `ARCHIVR_MCP_UPLOAD_ROOTS` directories. Otherwise the call is refused. The file must be a regular file of at most 256 MiB. These are refused by name, even inside a root:
+**Uploads (`capture_file`).** A file is accepted only if its real path (symlinks resolved) is inside one of the `ARCHIVR_MCP_UPLOAD_ROOTS` directories. Otherwise the call is refused. The file must be a regular file of at most `ARCHIVR_MCP_MAX_UPLOAD_BYTES` (default 2 GiB). These are refused by name, even inside a root:
 
 - Directories: `.ssh`, `.gnupg`, `.aws`, `.azure`, `.kube`, `.docker`, `.password-store`, `.config/gcloud`.
 - Files: `.env*`, `.netrc`, `.npmrc`, `.pypirc`, `.git-credentials`, SSH private keys (`id_rsa`, `id_dsa`, `id_ecdsa`, `id_ed25519` and their `.pub` files), `*.pem`, `*.key`, `*.p12`, `*.pfx`, `*.keystore`, `*.kdbx`, `credentials` and `credentials.json`, `secret`/`secrets` files with `.json`, `.yaml` or `.toml`, and `creds.txt`.
+
+The file is streamed from disk as a hand-built multipart body in 1 MiB chunks, so memory use does not grow with the file size (Bun's own `FormData` support would buffer the whole file). The request carries an exact `Content-Length`, and only the file's basename is sent as its filename, never the local path. The upload shares one 15-minute request timeout with the server's response, so very large files need a link that sustains roughly 2.5 MB/s or more for 2 GiB. If the file changes size while it is read, the upload fails.
 
 A staged upload is deleted if the capture fails.
 
@@ -269,7 +272,7 @@ Source layout: `src/index.ts` (startup), `src/server.ts` (tool and resource regi
 - **403 Forbidden on a tool.** The token's role is too low for that operation. Check the role in `whoami`.
 - **404 from admin, credential or job tools.** The server is probably an older build without the `mcp-api-extensions` routes.
 - **Tool missing from the client.** Check `ARCHIVR_MCP_TOOLSETS` (`credentials` is opt-in), the token's role, and `ARCHIVR_MCP_READONLY`. Set `ARCHIVR_MCP_LOG=info` and read stderr.
-- **`capture_file` refused.** The path is outside `ARCHIVR_MCP_UPLOAD_ROOTS`, the name is on the denylist, or the file is not a regular file under 256 MiB. Uploads are disabled when the variable is empty.
+- **`capture_file` refused.** The path is outside `ARCHIVR_MCP_UPLOAD_ROOTS`, the name is on the denylist, or the file is not a regular file within `ARCHIVR_MCP_MAX_UPLOAD_BYTES`. Uploads are disabled when the variable is empty.
 - **429.** The server is rate limiting. Wait a moment and retry.
 - **502 from `probe_url`.** The probe was inconclusive. The URL may not be supported by yt-dlp.
 - **A timeout error.** The operation may still be running on the server. Check it with `get_capture_job` or `list_capture_jobs` before retrying, so the same capture is not submitted twice.
