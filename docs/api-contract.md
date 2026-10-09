@@ -8,7 +8,7 @@
 > - `DELETE /api/admin/roles/:slug` returns 200 with a body `{"slug","users_affected","reorder_mask_cleared"}`, not an empty body.
 > - Effective config is flat: `env_vars`, `summary_providers`, `title_models`, `transcription_engines`, `extensions`, `server`.
 > - Archive info (`GET /api/archives/:id/info`) also returns `name`, `child_entry_count` and `db_bytes`, beyond the fields listed in the archivr spec.
-> - Read-scope requests that are not GET get 403 with the body text `read-only token`.
+> - Read-scope requests that are not GET, HEAD or OPTIONS get 403 with the body text `read-only token`.
 
 # Archivr API extensions (the contract)
 
