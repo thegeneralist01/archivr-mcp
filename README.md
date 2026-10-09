@@ -164,7 +164,7 @@ Columns: **Role** is the minimum role for the tool to be shown. The server still
 
 | Tool | Role | Class | Description |
 | --- | --- | --- | --- |
-| `admin_list` | admin | read | List users or roles (`what=users|roles`), or another user's API tokens (`what=user_tokens`). |
+| `admin_list` | admin | read | List users or roles (`what=users` or `what=roles`), or another user's API tokens (`what=user_tokens`). |
 | `set_user_status` | admin | write | Set a user to `active` or `disabled` (you cannot disable yourself or the last owner). |
 | `assign_role` | admin | write | Assign a role by slug (granting `owner` or `admin` needs the owner role). |
 | `remove_role` | admin | destructive | Remove a role from a user (removing `owner` or `admin` needs the owner role). |
