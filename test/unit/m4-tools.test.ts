@@ -63,8 +63,8 @@ describe("account tools", () => {
     expect(nf.isError).toBe(true);
     expect(textOf(nf)).toContain("Not found");
     const fb = await run(revokeToken, { token_uid: "zz", confirm: true }, api);
-    expect(textOf(fb)).toContain("read-only token");
     expect(textOf(fb)).toContain("Forbidden");
+    expect(textOf(fb)).toContain("read scope");
   });
 });
 

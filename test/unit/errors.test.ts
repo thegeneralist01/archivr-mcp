@@ -46,6 +46,25 @@ describe("toToolError mapping table", () => {
     });
   }
 
+  test("403 'read-only token' explains read scope and suggests a full-scope token", () => {
+    const text = describeApiError(403, "read-only token");
+    expect(text).toContain("read scope");
+    expect(text).toContain("cannot modify anything");
+    expect(text).toContain("full-scope token");
+    expect(text).not.toContain("Server said");
+  });
+
+  test("any other 403 says the role is not permitted and quotes the server message verbatim", () => {
+    const text = describeApiError(403, "only an owner can modify an owner account");
+    expect(text).toContain("role is not permitted");
+    expect(text).toContain("Server said: only an owner can modify an owner account");
+    expect(text).not.toContain("read-scope");
+    expect(text).not.toContain("cannot modify anything");
+    // Near-misses are not treated as the read-scope message.
+    expect(describeApiError(403, "read-only token for x")).toContain("role is not permitted");
+    expect(describeApiError(403, "")).not.toContain("Server said");
+  });
+
   test("an empty server message is not rendered as 'Server said:'", () => {
     expect(describeApiError(404, "")).not.toContain("Server said");
   });

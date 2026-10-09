@@ -78,6 +78,9 @@ function withServerMessage(prefix: string, serverMessage: string): string {
   return serverMessage === "" ? prefix : `${prefix} Server said: ${serverMessage}`;
 }
 
+/** The exact body Archivr sends when a read-scope token attempts a non-GET request. */
+const READ_ONLY_TOKEN_MESSAGE = "read-only token";
+
 /** Text for an HTTP status. The mapping table from the design (Part B6). */
 export function describeApiError(status: number, serverMessage: string): string {
   if (status === 503 && serverMessage === "setup_required") {
@@ -89,8 +92,11 @@ export function describeApiError(status: number, serverMessage: string): string 
     case 401:
       return "Not authenticated (401): the Archivr API token was rejected, is expired or was revoked. Create a new token and update ARCHIVR_TOKEN.";
     case 403:
+      if (serverMessage === READ_ONLY_TOKEN_MESSAGE) {
+        return "Forbidden (403): this API token has read scope and cannot modify anything. Use a full-scope token (create one in the Archivr web UI) for write operations.";
+      }
       return withServerMessage(
-        "Forbidden (403): this token's user or scope is not allowed to do that (read-scope tokens cannot modify anything).",
+        "Forbidden (403): this token's role is not permitted to perform this operation.",
         serverMessage,
       );
     case 404:
