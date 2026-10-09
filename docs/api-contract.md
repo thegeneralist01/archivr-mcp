@@ -1,7 +1,14 @@
-> **Status: provisional.** This is Part A of the Archivr MCP plan, copied verbatim as the working contract for the MCP
-> tool modules. It is superseded by the precise spec written by the Rust R0 workstream at
-> `archivr/docs/superpowers/specs/2026-10-08-mcp-api-extensions.md` (exact JSON field names, status codes and limits).
-> Where the two disagree, the archivr spec wins; update `src/client/schemas.ts` to match it.
+> **Status: Contract.** The authoritative copy is `archivr/docs/superpowers/specs/2026-10-08-mcp-api-extensions.md`
+> (status "Contract", exact JSON field names, status codes and limits). This file is the working copy the MCP tool
+> modules are built against. Where the two disagree, the archivr spec wins; update `src/client/schemas.ts` to match it.
+>
+> Response shapes the client must parse, as implemented on the `mcp-api-extensions` branch (archivr HEAD 10afef9).
+> Where the implementation differs from the spec, the client parses these shapes:
+>
+> - `DELETE /api/admin/roles/:slug` returns 200 with a body `{"slug","users_affected","reorder_mask_cleared"}`, not an empty body.
+> - Effective config is flat: `env_vars`, `summary_providers`, `title_models`, `transcription_engines`, `extensions`, `server`.
+> - Archive info (`GET /api/archives/:id/info`) also returns `name`, `child_entry_count` and `db_bytes`, beyond the fields listed in the archivr spec.
+> - Read-scope requests that are not GET get 403 with the body text `read-only token`.
 
 # Archivr API extensions (the contract)
 
