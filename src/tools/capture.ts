@@ -25,6 +25,11 @@ import { archiveInput, defineTool, openWorld, READ, WRITE, type ToolModule } fro
 export const MAX_TEXT_BYTES = 2 * 1024 * 1024;
 /** Uploads can be large; the request timeout covers the whole transfer. */
 const UPLOAD_TIMEOUT_MS = 15 * 60 * 1000;
+/**
+ * Cap for capture_file. Bun buffers multipart file parts in memory (see capture_file), so the
+ * generic 2 GiB upload default is too high until the client can stream a request body.
+ */
+export const MAX_UPLOAD_BYTES = 256 * 1024 * 1024;
 /** yt-dlp metadata probes can take a while. */
 const PROBE_TIMEOUT_MS = 3 * 60 * 1000;
 
@@ -190,8 +195,8 @@ export const captureFile = defineTool({
   title: "Capture a local file",
   description:
     "Upload a file from the machine running this MCP server and archive it. The path must be absolute, inside " +
-    "ARCHIVR_MCP_UPLOAD_ROOTS, not on the sensitive-file denylist (keys, .env, credentials) and within the size cap. " +
-    "The file is streamed from disk to Archivr (staged upload), then captured; if the capture request fails the staged upload is deleted. " +
+    "ARCHIVR_MCP_UPLOAD_ROOTS, not on the sensitive-file denylist (keys, .env, credentials) and at most 256 MiB. " +
+    "The file is uploaded to Archivr as a staged upload, then captured; if the capture request fails the staged upload is deleted. " +
     WAIT_NOTE,
   toolset: "capture",
   minRole: "user",
@@ -203,11 +208,14 @@ export const captureFile = defineTool({
     ...waitInput(CAPTURE_WAIT_S),
   },
   async handler(args, ctx) {
-    const file = await resolveUploadFile(args.path, { roots: ctx.config.uploadRoots });
+    const file = await resolveUploadFile(args.path, { roots: ctx.config.uploadRoots, maxBytes: MAX_UPLOAD_BYTES });
     const archive = await ctx.archive(args);
     const form = new FormData();
-    // Bun.file() is lazy: the body streams from disk rather than being buffered in memory.
-    form.append("file", Bun.file(file.realPath), file.name);
+    // A Bun.file() part keeps its full path as its name, so wrap it to send only the basename.
+    // Measured with Bun 1.3: fetch() buffers FormData file parts in memory (about 2x the file
+    // size), unlike a pull-based ReadableStream body. That is why MAX_UPLOAD_BYTES is modest.
+    const source = Bun.file(file.realPath);
+    form.append("file", new File([source], file.name, { type: source.type }));
     const uploadsPath = `/api/archives/${seg(archive)}/uploads`;
     const upload = await ctx.client.request("POST", uploadsPath, {
       form,
