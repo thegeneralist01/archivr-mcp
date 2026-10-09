@@ -77,7 +77,7 @@ export const searchEntries = defineTool({
   description:
     "Search archived entries. `q` is free text plus optional prefix filters separated by spaces: " +
     "source:<kind> (e.g. source:youtube), type:<entity kind>, url:<substring>, title:<substring>, after:<date>, before:<date> (YYYY-MM-DD), " +
-    "tag:<tag path>. Values cannot contain spaces. " +
+    "tag:</full/tag/path> (the server needs the leading slash, e.g. tag:/dev/rust). Values cannot contain spaces. " +
     "Any other word containing a colon is rejected as an unknown prefix (so search URLs with url:example.com, not https://...). " +
     "Remaining words are matched as free text. The `tag` argument is an alternative to tag:<path> in `q` (searching by tag also finds child entries). " +
     "Returns compact rows, paged with limit/offset.",
@@ -87,14 +87,15 @@ export const searchEntries = defineTool({
   input: {
     ...archiveInput,
     q: z.string().min(1).describe("Free text with optional prefix filters, e.g. 'rust source:youtube after:2025-01-01'"),
-    tag: z.string().min(1).optional().describe("Tag path to filter by (same as tag:<path> in q)"),
+    tag: z.string().min(1).optional().describe("Tag path to filter by, e.g. dev/rust or /dev/rust (a leading slash is added if missing; same as tag:</path> in q)"),
     collection: z.string().min(1).optional().describe("Collection uid, or 'main' for the default collection (default)."),
     ...paginationInput,
   },
   async handler(args, ctx) {
     const archive = await ctx.archive(args);
     const entries = await ctx.client.request("GET", `/api/archives/${seg(archive)}/entries/search`, {
-      query: { q: args.q, tag: args.tag, collection: args.collection },
+      // The server matches tag filters on the full path ("/dev/rust") and silently finds nothing without the slash.
+      query: { q: args.q, tag: args.tag === undefined ? undefined : `/${args.tag.replace(/^\/+/, "")}`, collection: args.collection },
       schema: EntrySummaryListSchema,
     });
     return entryPage(entries, args);

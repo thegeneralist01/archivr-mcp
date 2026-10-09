@@ -83,8 +83,11 @@ describe("list_entries / search_entries", () => {
     const out = jsonOf(await callTool(searchEntries, { q: "rust source:youtube", tag: "dev/rust", collection: "c9" }, directContext({ api }))) as any;
     expect(out.total).toBe(1);
     expect(api.calls("GET", "/api/archives/main/entries/search")[0]?.query).toEqual({
-      q: "rust source:youtube", tag: "dev/rust", collection: "c9",
+      q: "rust source:youtube", tag: "/dev/rust", collection: "c9",
     });
+    // An already-slashed path is not doubled.
+    await callTool(searchEntries, { q: "x", tag: "/dev/rust" }, directContext({ api }));
+    expect(api.calls("GET", "/api/archives/main/entries/search")[1]?.query).toMatchObject({ tag: "/dev/rust" });
     expect(searchEntries.description).toContain("source:");
     expect(searchEntries.description).toContain("before:");
   });
