@@ -181,6 +181,21 @@ describe("admin settings tools", () => {
     expect(jsonOf(res)).toMatchObject({ env_vars: [{ name: "ARCHIVR_ANTHROPIC_API_KEY", set: true, value: null }, { name: "ARCHIVR_BIND" }] });
   });
 
+  test("server_info effective_config accepts the explicit nulls a real server sends for disabled engines", async () => {
+    const config = {
+      server: {},
+      env_vars: [],
+      summary_providers: [],
+      title_models: {},
+      transcription_engines: [{ kind: "whisper", enabled: false, configured: false, label: null, english_only: null, languages: null, error: null }],
+      extensions: {},
+    };
+    const api = new MockApi().on("GET", "/api/admin/effective-config", { json: config });
+    const res = await run(serverInfo, { section: "effective_config" }, api);
+    expect(res.isError).toBeUndefined();
+    expect(jsonOf(res)).toMatchObject({ transcription_engines: [{ kind: "whisper", label: null }] });
+  });
+
   test("server_info archive_info uses the resolved archive; instance_settings and ytdlp hit their endpoints", async () => {
     const info = {
       archive_id: "main", label: "Main", name: "main", entry_count: 5, root_entry_count: 4, child_entry_count: 1, artifact_count: 9, blob_count: 8,

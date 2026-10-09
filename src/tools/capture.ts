@@ -211,11 +211,13 @@ export const captureFile = defineTool({
     const file = await resolveUploadFile(args.path, { roots: ctx.config.uploadRoots, maxBytes: MAX_UPLOAD_BYTES });
     const archive = await ctx.archive(args);
     const form = new FormData();
-    // A Bun.file() part keeps its full path as its name, so wrap it to send only the basename.
+    // A Bun.file() part keeps its full path as its wire filename, even when wrapped in
+    // `new File([source], name)` (Bun 1.3.14), which leaks the local path to the server. Slicing
+    // gives a plain Blob, so the explicit basename passed to append() is what goes on the wire.
     // Measured with Bun 1.3: fetch() buffers FormData file parts in memory (about 2x the file
     // size), unlike a pull-based ReadableStream body. That is why MAX_UPLOAD_BYTES is modest.
     const source = Bun.file(file.realPath);
-    form.append("file", new File([source], file.name, { type: source.type }));
+    form.append("file", source.slice(0, source.size, source.type), file.name);
     const uploadsPath = `/api/archives/${seg(archive)}/uploads`;
     const upload = await ctx.client.request("POST", uploadsPath, {
       form,
