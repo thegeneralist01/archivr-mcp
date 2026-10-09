@@ -255,8 +255,11 @@ describe("capture_file", () => {
 
     const file = uploaded?.form?.get("file");
     expect(file).toBeInstanceOf(Blob);
-    expect((file as File).name).toBe("note.txt");
     expect(await (file as File).text()).toBe("hello upload");
+    // The wire filename must be the basename, never the local path (Bun keeps a BunFile's path otherwise).
+    const wire = await new Response(uploaded?.form).text();
+    expect(wire).toContain('filename="note.txt"');
+    expect(wire).not.toContain(root);
     expect([...(uploaded?.form?.keys() ?? [])]).toEqual(["file"]);
     expect(uploaded?.headers.get("content-type")).toBeNull(); // fetch sets the multipart boundary itself
     expect(api.calls("POST", CAPTURES)[0]?.json).toEqual({ locator: LOCATOR, quality: "best" });

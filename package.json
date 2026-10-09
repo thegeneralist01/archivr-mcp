@@ -12,7 +12,7 @@
     "dev": "bun --watch src/index.ts",
     "start": "bun src/index.ts",
     "test": "bun test test/unit",
-    "test:e2e": "bun test test/e2e",
+    "test:e2e": "ARCHIVR_SERVER_BIN=${ARCHIVR_SERVER_BIN:-/Users/thegeneralist/personal/archivr/.worktrees/mcp-api/target/debug/archivr-server} ARCHIVR_CLI_BIN=${ARCHIVR_CLI_BIN:-/Users/thegeneralist/personal/archivr/.worktrees/mcp-api/target/debug/archivr} bun test test/e2e",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

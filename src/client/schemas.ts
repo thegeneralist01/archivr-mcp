@@ -487,9 +487,10 @@ export const EffectiveConfigSchema = looseObject({
       kind: z.string(),
       enabled: z.boolean().optional(),
       configured: z.boolean().optional(),
-      label: z.string().optional(),
-      english_only: z.boolean().optional(),
-      languages: z.array(z.string()).optional(),
+      // The server sends explicit nulls for engines that are disabled / not configured.
+      label: nullableString.optional(),
+      english_only: z.boolean().nullable().optional(),
+      languages: z.array(z.string()).nullable().optional(),
       error: nullableString.optional(),
     }),
   ),

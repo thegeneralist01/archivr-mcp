@@ -252,8 +252,8 @@ A staged upload is deleted if the capture fails.
 ## Development
 
 ```sh
-bun test               # unit tests (mocked fetch, in-memory transport)
-bun run test:e2e       # end-to-end tests; they skip unless a built archivr-server is available
+bun test               # unit tests (mocked fetch, in-memory transport); e2e suites skip themselves
+bun run test:e2e       # end-to-end tests against a built archivr-server (see test/e2e/README.md)
 bun run typecheck      # tsc --noEmit
 ```
 
