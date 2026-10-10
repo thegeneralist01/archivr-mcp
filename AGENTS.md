@@ -2,6 +2,8 @@
 
 MCP server (stdio) that manages an [Archivr](../archivr) instance over its REST API. Bun + TypeScript (strict), `@modelcontextprotocol/sdk` 1.32.1 (pinned), `zod` 4. It is a thin client: **the Archivr server is the only authority** for roles, visibility and validation. Hiding a tool is a convenience, never a security boundary.
 
+For user-facing behavior, capture options, REST contracts, tool capabilities, permissions, docs, or naming, use Archivr's [ecosystem change checklist](https://github.com/thegeneralist01/archivr/blob/master/docs/ecosystem-change-checklist.md) before implementation and again before reporting completion. Record applicability, action or reason, verification, and links for Archivr, the Chrome extension, and MCP, including direct agent work without a PR. An applicable unfinished companion change needs a named follow-up.
+
 ## Commands
 
 ```sh

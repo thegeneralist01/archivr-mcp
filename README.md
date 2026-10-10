@@ -2,6 +2,8 @@
 
 An MCP server (stdio transport) that lets an MCP client such as Claude Code or Claude Desktop browse, capture, organise and administer an [Archivr](../archivr) instance through its REST API. Written in TypeScript for Bun. It keeps no state of its own: each tool call is a request to the Archivr server, which is the sole authority on what a token may do.
 
+Contributing? See the [contributor guide](CONTRIBUTING.md) and its ecosystem change checklist.
+
 ## Requirements
 
 - Bun 1.1.0 or newer.
