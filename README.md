@@ -7,7 +7,7 @@ An MCP server (stdio transport) that lets an MCP client such as Claude Code or C
 - Bun 1.1.0 or newer.
 - A running archivr-server that the MCP host can reach over HTTP or HTTPS.
 - An API token from that server. Create the API token in the Archivr web UI (Settings, API tokens).
-- For the admin, credential and job tools, the Archivr server must include the management API merged in archivr PR #40 (commit `ace3574` on `master`) or later. Those tools fail against an older server build.
+- For the admin, credential and job tools, the Archivr server must include the management API merged in archivr PR #40 (commit `3b748fb` on `master`) or later. Those tools fail against an older server build.
 
 ## Install and run
 
