@@ -7,7 +7,7 @@ An MCP server (stdio transport) that lets an MCP client such as Claude Code or C
 - Bun 1.1.0 or newer.
 - A running archivr-server that the MCP host can reach over HTTP or HTTPS.
 - An API token from that server. Create the API token in the Archivr web UI (Settings, API tokens).
-- For the admin, credential and job tools, the server must be built from the `mcp-api-extensions` branch of the archivr repo. Those tools fail against an older server build.
+- For the admin, credential and job tools, the Archivr server must include the management API merged in archivr PR #40 (commit `ace3574` on `master`) or later. Those tools fail against an older server build.
 
 ## Install and run
 
@@ -251,7 +251,7 @@ A staged upload is deleted if the capture fails.
 - `update_instance_settings` accepts `public_index_enabled`, `public_entry_content_enabled` and `open_registration_enabled`. Its own description marks them as having no effect at present. `reorder_children_role_bits` can be changed only by the owner.
 - Cancelling a tool call stops only the local polling. The server job keeps running.
 - Read-only mode is a registration filter in this server. The read-scope token rule on the Archivr side is what stops writes made with a read-scope token.
-- Admin, credential and job tools need the `mcp-api-extensions` server build (see Requirements).
+- Admin, credential and job tools need an Archivr server that includes PR #40 (see Requirements).
 - The only transport is stdio. There is no HTTP transport.
 
 ## Development
@@ -270,7 +270,7 @@ Source layout: `src/index.ts` (startup), `src/server.ts` (tool and resource regi
 - **503 `setup_required`.** The Archivr instance has not been set up yet. Finish setup in the web UI first.
 - **403 `read-only token`.** The token has read scope, and the call is not a GET. Use a full-scope token for writes.
 - **403 Forbidden on a tool.** The token's role is too low for that operation. Check the role in `whoami`.
-- **404 from admin, credential or job tools.** The server is probably an older build without the `mcp-api-extensions` routes.
+- **404 from admin, credential or job tools.** The server is probably an older build without the PR #40 routes.
 - **Tool missing from the client.** Check `ARCHIVR_MCP_TOOLSETS` (`credentials` is opt-in), the token's role, and `ARCHIVR_MCP_READONLY`. Set `ARCHIVR_MCP_LOG=info` and read stderr.
 - **`capture_file` refused.** The path is outside `ARCHIVR_MCP_UPLOAD_ROOTS`, the name is on the denylist, or the file is not a regular file within `ARCHIVR_MCP_MAX_UPLOAD_BYTES`. Uploads are disabled when the variable is empty.
 - **429.** The server is rate limiting. Wait a moment and retry.

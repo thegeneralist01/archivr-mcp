@@ -10,7 +10,7 @@ export ARCHIVR_CLI_BIN=/path/to/archivr/target/debug/archivr
 bun run test:e2e        # fails fast if either variable is unset
 ```
 
-The binaries must come from the `mcp-api-extensions` branch of the Archivr repo. Without
+The binaries must come from Archivr `master` at or after PR #40 (`ace3574`). Without
 `ARCHIVR_SERVER_BIN` (and `ARCHIVR_CLI_BIN`) every e2e suite skips itself, so a plain `bun test`
 stays green.
 

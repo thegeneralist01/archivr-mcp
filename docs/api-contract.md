@@ -2,7 +2,7 @@
 > (status "Contract", exact JSON field names, status codes and limits). This file is the working copy the MCP tool
 > modules are built against. Where the two disagree, the archivr spec wins; update `src/client/schemas.ts` to match it.
 >
-> Response shapes the client must parse, as implemented on the `mcp-api-extensions` branch (archivr HEAD 10afef9).
+> Response shapes the client must parse, as implemented in archivr PR #40 (merged as `ace3574`).
 > Where the implementation differs from the spec, the client parses these shapes:
 >
 > - `DELETE /api/admin/roles/:slug` returns 200 with a body `{"slug","users_affected","reorder_mask_cleared"}`, not an empty body.

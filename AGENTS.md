@@ -12,7 +12,7 @@ bun run test:e2e         # real archivr-server + real stdio MCP (needs the built
 bun run start            # needs ARCHIVR_URL and ARCHIVR_TOKEN
 ```
 
-E2E needs `ARCHIVR_SERVER_BIN` and `ARCHIVR_CLI_BIN`, pointing at an `archivr-server` and `archivr` built from the `mcp-api-extensions` branch of the Archivr repo (`cargo build -p archivr-server -p archivr-cli`). `bun run test:e2e` fails fast if either is unset. Rebuild after any Archivr server change, or e2e tests the old server.
+E2E needs `ARCHIVR_SERVER_BIN` and `ARCHIVR_CLI_BIN`, pointing at an `archivr-server` and `archivr` built from Archivr `master` at or after PR #40 (`ace3574`) (`cargo build -p archivr-server -p archivr-cli`). `bun run test:e2e` fails fast if either is unset. Rebuild after any Archivr server change, or e2e tests the old server.
 
 ## Layout
 
