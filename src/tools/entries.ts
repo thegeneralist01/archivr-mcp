@@ -1,3 +1,5 @@
+import { rm } from "node:fs/promises";
+import { openDownloadTarget } from "../lib/files";
 import { z } from "zod";
 import { seg } from "../client/http";
 import {
@@ -271,6 +273,78 @@ export const deleteEntry = defineTool({
   },
 });
 
+export const exportEntries = defineTool({
+  name: "export_entries",
+  title: "Export entries",
+  description:
+    "Export one or more archived entries as a self-contained HTML or Markdown bundle and save it to the " +
+    "local download directory (ARCHIVR_MCP_DOWNLOAD_DIR). HTML exports are ZIP files; a single Markdown " +
+    "entry produces a .md file and multiple entries produce a ZIP of .md files. Pass credit: false to omit " +
+    "the 'Preserved with archivr' footer. Returns the local path written.",
+  toolset: "core",
+  minRole: "user",
+  annotations: READ,
+  input: {
+    ...archiveInput,
+    entries: z.array(entryUid).min(1).max(50).describe("Entry UIDs to export, in output order."),
+    format: z
+      .enum(["html", "markdown"])
+      .default("html")
+      .describe("Output format. html produces a ZIP bundle; markdown produces .md or a ZIP of .md files."),
+    layout: z
+      .enum(["combined", "separate"])
+      .default("combined")
+      .optional()
+      .describe("combined (default): one document or ZIP. separate: one file per entry inside a ZIP."),
+    credit: z.boolean().default(true).optional().describe("Include a 'Preserved with archivr' credit. Default true."),
+    output_filename: z
+      .string()
+      .min(1)
+      .optional()
+      .describe("Override the saved filename; defaults to the filename from the server's Content-Disposition header."),
+  },
+  async handler(args, ctx) {
+    const archive = await ctx.archive(args);
+    const response = await ctx.client.stream("GET", `/api/archives/${seg(archive)}/export`, {
+      query: {
+        entries: args.entries.join(","),
+        format: args.format,
+        layout: args.layout,
+        credit: args.credit,
+      },
+    });
+
+    // Derive a filename from Content-Disposition, falling back to a generic name.
+    const disposition = response.headers.get("content-disposition") ?? "";
+    const serverName =
+      /filename="([^"]+)"/.exec(disposition)?.[1] ??
+      /filename=([^\s;]+)/.exec(disposition)?.[1] ??
+      `export.${args.format === "html" || args.entries.length > 1 ? "zip" : "md"}`;
+    const desiredName = args.output_filename ?? serverName;
+
+    const { path, handle } = await openDownloadTarget(ctx.config.downloadDir, desiredName);
+    let bytes = 0;
+    try {
+      const reader = response.body?.getReader();
+      if (reader !== undefined) {
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          await handle.write(value);
+          bytes += value.byteLength;
+        }
+      }
+      await handle.close();
+    } catch (error) {
+      await handle.close().catch(() => {});
+      await rm(path, { force: true });
+      throw error;
+    }
+
+    return jsonResult({ saved_to: path, bytes, format: args.format, entry_count: args.entries.length });
+  },
+});
+
 export const entriesTools: ToolModule = () => [
   listEntries,
   searchEntries,
@@ -279,4 +353,5 @@ export const entriesTools: ToolModule = () => [
   renameEntry,
   reorderChildren,
   deleteEntry,
+  exportEntries,
 ];

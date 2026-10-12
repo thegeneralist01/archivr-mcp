@@ -93,11 +93,11 @@ Two further restrictions apply:
 
 ## Tool catalogue
 
-There are 67 tools in total. 61 are registered by default and the 6 `credentials` tools are opt-in.
+There are 68 tools in total. 62 are registered by default and the 6 `credentials` tools are opt-in.
 
 Columns: **Role** is the minimum role for the tool to be shown. The server still enforces it. **Class** is `read`, `write` or `destructive`. `open-world` means the tool makes outbound requests to arbitrary URLs or to a configured LLM provider. Destructive tools require a literal `confirm: true` argument and refuse the call without it.
 
-### Core (12 tools, default on)
+### Core (13 tools, default on)
 
 | Tool | Role | Class | Description |
 | --- | --- | --- | --- |
@@ -113,6 +113,7 @@ Columns: **Role** is the minimum role for the tool to be shown. The server still
 | `delete_entry` | user | destructive | Permanently delete an entry with its child entries and its tag and collection links. |
 | `get_artifact` | user | read | Read an archived file by `entry_uid` and `artifact_index` (or blob sha256), with HTTP Range support. |
 | `download_artifact` | user | write | Stream an archived file into `ARCHIVR_MCP_DOWNLOAD_DIR` (no size limit). |
+| `export_entries` | user | read | Export one or more entries as an HTML or Markdown bundle saved into `ARCHIVR_MCP_DOWNLOAD_DIR`. |
 
 ### Capture (14 tools, default on)
 
