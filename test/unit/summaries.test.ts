@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { toToolContext } from "../../src/tools/context";
-import { generateThreadTitle, getSummary, listTranscriptionEngines, summarizeEntry } from "../../src/tools/summaries";
+import { generateThreadTitle, getSummary, listTranscriptionEngines, summarizeEntry, writeSummary } from "../../src/tools/summaries";
 import { callTool, directContext, textOf } from "../helpers/inMemory";
 import { installFakeClock, sequence, type FakeClock } from "../helpers/fakeClock";
 import { CANARY_PASSWORD, CANARY_TOKEN, MockApi } from "../helpers/mockFetch";
@@ -209,5 +209,95 @@ describe("generate_thread_title and transcription engines", () => {
     api.on("GET", "/api/summary/transcription-engines", { json: [{ kind: "whisper", label: "Whisper", english_only: false, languages: ["en"] }] });
     const result = await callTool(listTranscriptionEngines, {}, direct);
     expect(JSON.parse(textOf(result))).toEqual({ engines: [{ kind: "whisper", label: "Whisper", english_only: false, languages: ["en"] }] });
+  });
+});
+
+describe("write_summary", () => {
+  const agentRecord = (extra: Record<string, unknown> = {}) => ({
+    summary_uid: "sum_2",
+    entry_uid: "ent_1",
+    provider_kind: "agent",
+    resolved_model: "test-model",
+    provider_model: "test-model",
+    prompt_version: "external",
+    input_sha256: "external",
+    status: "completed",
+    summary_text: JSON.stringify({ tldr: "T", summary: "S", tags: ["rust"] }),
+    error_text: null,
+    created_at: "t0",
+    updated_at: "t0",
+    completed_at: "t0",
+    ...extra,
+  });
+
+  test("sends PUT with kind:agent and model when given", async () => {
+    const { api, direct } = setup();
+    api.on("PUT", SUMMARY, { status: 201, json: agentRecord() });
+    const result = await callTool(
+      writeSummary,
+      { entry_uid: "ent_1", tldr: "T", summary: "S", tags: ["rust"], model: "test-model" },
+      direct,
+    );
+    expect(result.isError).toBeUndefined();
+    const body = parse(result);
+    expect(body).toMatchObject({ provider_kind: "agent", resolved_model: "test-model" });
+    const sent = api.calls("PUT", SUMMARY)[0]?.json as Record<string, unknown>;
+    expect(sent).toEqual({ kind: "agent", tldr: "T", summary: "S", tags: ["rust"], model: "test-model" });
+  });
+
+  test("omits model from PUT body when not provided", async () => {
+    const { api, direct } = setup();
+    api.on("PUT", SUMMARY, { status: 201, json: agentRecord({ resolved_model: null, provider_model: "" }) });
+    await callTool(writeSummary, { entry_uid: "ent_1", tldr: "T", summary: "S" }, direct);
+    const sent = api.calls("PUT", SUMMARY)[0]?.json as Record<string, unknown>;
+    expect(sent).not.toHaveProperty("model");
+    expect(sent).toMatchObject({ kind: "agent", tags: [] });
+  });
+
+  test("tags default to empty array", async () => {
+    const { api, direct } = setup();
+    api.on("PUT", SUMMARY, { status: 201, json: agentRecord() });
+    await callTool(writeSummary, { entry_uid: "ent_1", tldr: "T", summary: "S" }, direct);
+    const sent = api.calls("PUT", SUMMARY)[0]?.json as Record<string, unknown>;
+    expect(sent).toMatchObject({ tags: [] });
+  });
+
+  test("zod rejects empty tldr", async () => {
+    const { direct } = setup();
+    await expect(
+      callTool(writeSummary, { entry_uid: "ent_1", tldr: "", summary: "S" }, direct),
+    ).rejects.toThrow();
+  });
+
+  test("zod rejects 11 tags", async () => {
+    const { direct } = setup();
+    const tags = Array.from({ length: 11 }, (_, i) => `tag${i}`);
+    await expect(
+      callTool(writeSummary, { entry_uid: "ent_1", tldr: "T", summary: "S", tags }, direct),
+    ).rejects.toThrow();
+  });
+
+  test("server 409 comes back as isError with the message", async () => {
+    const { api, direct } = setup();
+    api.on("PUT", SUMMARY, { status: 409, json: { error: "no summary to edit" } });
+    const result = await callTool(
+      writeSummary,
+      { entry_uid: "ent_1", tldr: "T", summary: "S" },
+      direct,
+    );
+    expect(result.isError).toBe(true);
+    expect(textOf(result)).toContain("no summary to edit");
+  });
+
+  test("server 400 comes back as isError with the message", async () => {
+    const { api, direct } = setup();
+    api.on("PUT", SUMMARY, { status: 400, json: { error: "summary must not be empty" } });
+    const result = await callTool(
+      writeSummary,
+      { entry_uid: "ent_1", tldr: "T", summary: "S" },
+      direct,
+    );
+    expect(result.isError).toBe(true);
+    expect(textOf(result)).toContain("summary must not be empty");
   });
 });

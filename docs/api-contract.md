@@ -57,3 +57,55 @@ Errors `{"error": msg}`; 401 unauth, 403 role/ownership, 404 missing, 409 state 
 ## Entry exports (Archivr PR #42)
 
 `GET /api/archives/:id/export` accepts comma-separated `entries` (1–100 entry UIDs), `format=html|markdown`, `layout=together|separate` (default `together`), and `credit=true|false` (default `true`). It requires an authenticated user and works with a read-scope token. The response is always `application/zip`, including a single Markdown entry: the ZIP holds the document and accompanying assets. The MCP tool calls the `together` layout `combined` and saves the response locally, so its MCP annotation is `write` even though its HTTP request is GET.
+
+## Agent-written and hand-edited summaries
+
+`PUT /api/archives/:archive_id/entries/:entry_uid/summary`
+
+Inserts a new completed summary row without going through the provider pipeline. The newest completed row becomes the displayed summary; earlier rows are retained and remain in `entry_summaries`.
+
+**Request body**
+
+```json
+{
+  "kind": "agent" | "manual",
+  "tldr": "string (optional, default '')",
+  "summary": "string (required)",
+  "tags": ["string", ...] (optional, default []),
+  "model": "string (optional, agent only)"
+}
+```
+
+**Validation rules (enforced server-side; MCP zod mirrors them)**
+- `kind`: must be `"agent"` or `"manual"`. Any provider kind (`"anthropic_http"` etc.) → 400.
+- `tldr`: trimmed; empty allowed; no control characters; max 300 Unicode scalar values.
+- `summary`: trimmed; must not be empty; control characters other than `\n`, `\r`, `\t` rejected; max 20 000 characters.
+- `tags`: each tag trimmed and lowercased; empty tags silently dropped; deduped first-seen; no control characters; max 50 characters per tag; max 10 tags after dedupe.
+- `model`: trimmed; optional; empty/absent → stored as `''` / NULL; no control characters; max 100 characters. `model` is accepted only when `kind == "agent"`; passing it with `kind == "manual"` → 400.
+
+**Row attribution** (the `entry_summaries` columns written)
+| Column | Value |
+|---|---|
+| `provider_kind` | `"agent"` or `"manual"` |
+| `provider_model` | model label or `''` |
+| `resolved_model` | model label or NULL |
+| `prompt_version` | `"external"` |
+| `input_sha256` | `"external"` |
+| `status` | `"completed"` |
+| `created_at = updated_at = completed_at` | server timestamp |
+
+**Status codes**
+| Code | Meaning |
+|---|---|
+| 201 | Created; body is the full `EntrySummaryRecord` JSON |
+| 400 | Validation failure (bad kind, bad field value, model with manual) |
+| 401 | Not authenticated |
+| 403 | Insufficient role (requires USER) or read-scope token |
+| 404 | Archive or entry not found (hidden entries return 404) |
+| 409 | `{"error":"no summary to edit"}` — `kind:"manual"` and the entry has no completed summary yet |
+
+**Notes**
+- A read-scope Bearer token gets 403 (blocked by `token_scope.rs` for all non-GET/HEAD methods).
+- A provider generation running concurrently will supersede this row when it completes; that is the existing regeneration semantics.
+- Entry free-text search includes `summary_text` from the latest completed row, so the row is immediately searchable after the 201 response.
+- `"agent"` and `"manual"` are **not** added to `summarizer::PROVIDER_KINDS`; `POST …/summary` cannot request them.
