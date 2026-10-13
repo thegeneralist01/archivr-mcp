@@ -93,7 +93,7 @@ Two further restrictions apply:
 
 ## Tool catalogue
 
-There are 68 tools in total. 62 are registered by default and the 6 `credentials` tools are opt-in.
+There are 69 tools in total. 63 are registered by default and the 6 `credentials` tools are opt-in.
 
 Columns: **Role** is the minimum role for the tool to be shown. The server still enforces it. **Class** is `read`, `write` or `destructive`. `open-world` means the tool makes outbound requests to arbitrary URLs or to a configured LLM provider. Destructive tools require a literal `confirm: true` argument and refuse the call without it.
 
@@ -115,7 +115,7 @@ Columns: **Role** is the minimum role for the tool to be shown. The server still
 | `download_artifact` | user | write | Stream an archived file into `ARCHIVR_MCP_DOWNLOAD_DIR` (no size limit). |
 | `export_entries` | user | write | Export up to 100 entries as an HTML or Markdown ZIP bundle saved into `ARCHIVR_MCP_DOWNLOAD_DIR`. |
 
-### Capture (14 tools, default on)
+### Capture (15 tools, default on)
 
 | Tool | Role | Class | Description |
 | --- | --- | --- | --- |
@@ -131,6 +131,7 @@ Columns: **Role** is the minimum role for the tool to be shown. The server still
 | `list_runs` | user | read | List capture runs (one per capture, including each playlist item), newest first. |
 | `get_summary` | user | read | Read the latest completed summary of an entry and the latest generation attempt. |
 | `summarize_entry` | user | write, open-world | Generate an LLM summary of an entry with a server-configured provider. |
+| `write_summary` | user | write | Save an agent-written summary (tldr, summary, tags) as the entry's current summary; earlier summaries are kept. |
 | `generate_thread_title` | user | write, open-world | Name an X (Twitter) thread entry with an LLM and save it as the entry title (overwrites the current title). |
 | `list_transcription_engines` | user | read | List the local speech-to-text engines enabled on the server. |
 

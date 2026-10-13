@@ -14,7 +14,7 @@ const USER_TOOLS = [
   "list_transcription_engines", "probe_playlist", "probe_url", "rearchive_entry", "remove_from_collection",
   "rename_entry", "reorder_children", "revoke_other_sessions", "revoke_session", "revoke_token",
   "search_entries", "set_entry_visibility", "summarize_entry", "tag_entry", "untag_entry", "update_collection",
-  "update_profile", "update_tag", "whoami",
+  "update_profile", "update_tag", "whoami", "write_summary",
 ];
 const ADMIN_ONLY_TOOLS = [
   "admin_list", "assign_role", "blob_cleanup_run", "blob_cleanup_scan", "create_cookie_rule", "create_role",
@@ -68,7 +68,7 @@ describe.skipIf(E2E_DISABLED)("e2e: tools, entries, capture, tags, collections",
     expect(byRole.admin.toolNames).toEqual([...USER_TOOLS, ...ADMIN_ONLY_TOOLS].sort());
     expect(byRole.owner.toolNames).toEqual([...USER_TOOLS, ...ADMIN_ONLY_TOOLS, ...OWNER_ONLY_TOOLS].sort());
     expect(byRole.guest.toolNames).toEqual(["list_archives", "whoami"]);
-    expect([byRole.owner, byRole.admin, byRole.user].map((s) => s.toolNames.length)).toEqual([68, 67, 48]);
+    expect([byRole.owner, byRole.admin, byRole.user].map((s) => s.toolNames.length)).toEqual([69, 68, 49]);
   });
 
   test("admin tools are hidden from a user and a call is refused by the MCP server", async () => {
@@ -82,7 +82,7 @@ describe.skipIf(E2E_DISABLED)("e2e: tools, entries, capture, tags, collections",
   test("default toolsets leave out the credentials tools; read-only mode registers only read-only tools", async () => {
     const dflt = await fx.mcp(fx.cast.owner.token);
     for (const name of CREDENTIAL_TOOLS) expect(dflt.toolNames).not.toContain(name);
-    expect(dflt.toolNames.length).toBe(62);
+    expect(dflt.toolNames.length).toBe(63);
 
     const ro = await fx.mcp(fx.cast.owner.token, { toolsets: ALL_TOOLSETS, readonly: true });
     const listed = await ro.client.listTools();
@@ -313,6 +313,39 @@ describe.skipIf(E2E_DISABLED)("e2e: tools, entries, capture, tags, collections",
     expect(other.isError).toBe(true);
     expect(other.text).toContain("ARCHIVR_OPENAI_API_KEY");
   });
+
+  // ── 9. write_summary ──────────────────────────────────────────────────────
+
+  test("write_summary creates an agent-attributed completed summary that is searchable", async () => {
+    const user = await fx.mcp(fx.cast.user.token);
+    const entryUid: string = obj(await user.call("capture_text", { title: "Quokka notes", body: "quokkaflux research text", wait: true }))["entry_uids"][0];
+
+    const writeResult = await user.call("write_summary", {
+      entry_uid: entryUid,
+      tldr: "Zebra headline",
+      summary: "Notes about quokkaflux.",
+      tags: ["Animals"],
+      model: "test-model",
+    });
+    expect(writeResult.isError).toBeFalsy();
+
+    // get_summary now shows the agent summary (untrusted-wrapped; parse past the header line)
+    const summaryOutcome = await user.call("get_summary", { entry_uid: entryUid });
+    expect(summaryOutcome.isError).toBeFalsy();
+    const summaryRaw = summaryOutcome.text;
+    const summaryJson = JSON.parse(summaryRaw.slice(summaryRaw.indexOf("\n") + 1)) as Record<string, unknown>;
+    const s = summaryJson["summary"] as Record<string, unknown>;
+    expect(s?.["provider_kind"]).toBe("agent");
+    expect(s?.["resolved_model"]).toBe("test-model");
+    const summaryText = typeof s?.["summary_text"] === "string" ? JSON.parse(s["summary_text"] as string) : {};
+    expect(JSON.stringify(summaryText["tags"])).toContain("animals");
+
+    // searchable by summary text
+    const search = obj(await user.call("search_entries", { q: "quokkaflux" }));
+    const uids = (search["items"] as Array<{ entry_uid: string }>).map(i => i.entry_uid);
+    expect(uids).toContain(entryUid);
+  });
+
 
   test("isolation: no session_uid, hash or secret in any response or MCP stdout/stderr", () => {
     assertNoLeaks(fx);
