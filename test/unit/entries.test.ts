@@ -3,6 +3,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { exportEntries } from "../../src/tools/entries";
+import { selectTools } from "../../src/tools/registry";
 import { callTool, directContext, jsonOf, textOf } from "../helpers/inMemory";
 import { MockApi } from "../helpers/mockFetch";
 
@@ -44,7 +45,7 @@ describe("export_entries", () => {
   test("passes entries as comma-joined query param and forwards format/layout/credit", async () => {
     const api = base().on("GET", EXPORT_PATH, {
       bytes: new Uint8Array([1]),
-      headers: { "content-disposition": 'attachment; filename="out.md"' },
+      headers: { "content-disposition": 'attachment; filename="out.zip"' },
     });
     const ctx = directContext({ api, config: { downloadDir: dir } });
     await callTool(exportEntries, { entries: ["a", "b", "c"], format: "markdown", layout: "separate", credit: false }, ctx);
@@ -55,12 +56,69 @@ describe("export_entries", () => {
     expect(req.query["credit"]).toBe("false");
   });
 
+  test("maps the combined layout to the server's together value", async () => {
+    const api = base().on("GET", EXPORT_PATH, (request) =>
+      request.query["layout"] === "together"
+        ? { bytes: new Uint8Array([80, 75, 3, 4]) }
+        : { status: 400, json: { error: "layout must be together or separate" } },
+    );
+    const ctx = directContext({ api, config: { downloadDir: dir } });
+    const result = await callTool(exportEntries, { entries: ["uid-x"], layout: "combined" }, ctx);
+    expect(result.isError).toBeFalsy();
+    expect(api.calls("GET", EXPORT_PATH)[0]?.query["layout"]).toBe("together");
+  });
+
+  test("allows the server's 100-entry limit and rejects 101", async () => {
+    const api = base().on("GET", EXPORT_PATH, { bytes: new Uint8Array([80, 75, 3, 4]) });
+    const ctx = directContext({ api, config: { downloadDir: dir } });
+    const entries = Array.from({ length: 100 }, (_, i) => `uid-${i}`);
+    const result = await callTool(exportEntries, { entries }, ctx);
+    expect(result.isError).toBeFalsy();
+    expect(api.calls("GET", EXPORT_PATH)[0]?.query["entries"]?.split(",")).toHaveLength(100);
+    await expect(callTool(exportEntries, { entries: [...entries, "uid-100"] }, ctx)).rejects.toThrow();
+  });
+
+  test("is hidden by MCP read-only mode because it writes a local file", () => {
+    const selected = selectTools([exportEntries], {
+      toolsets: new Set(["core"]),
+      readonly: true,
+      me: { roleBits: 3 },
+    });
+    expect(selected).toEqual([]);
+  });
+
+  test("lets export generation outlast the default request timeout", async () => {
+    const api = base().on("GET", EXPORT_PATH, async (request) => {
+      await new Promise<void>((resolve, reject) => {
+        const timer = setTimeout(resolve, 40);
+        request.signal?.addEventListener("abort", () => {
+          clearTimeout(timer);
+          reject(new Error("aborted"));
+        }, { once: true });
+      });
+      return { bytes: new Uint8Array([80, 75, 3, 4]) };
+    });
+    const ctx = directContext({ api, config: { archive: "main", downloadDir: dir, timeoutMs: 10 } });
+    ctx.base.client = api.client({ timeoutMs: 10 });
+    const result = await callTool(exportEntries, { entries: ["uid-x"] }, ctx);
+    expect(result.isError).toBeFalsy();
+  });
+
   test("falls back to a generic filename when Content-Disposition is absent", async () => {
     const api = base().on("GET", EXPORT_PATH, { bytes: new Uint8Array([1]) });
     const ctx = directContext({ api, config: { downloadDir: dir } });
     const result = await callTool(exportEntries, { entries: ["uid-x"], format: "html" }, ctx);
     const out = jsonOf(result) as { saved_to: string };
     expect(out.saved_to).toBe(join(dir, "export.zip"));
+  });
+
+  test("Markdown fallback is also a ZIP", async () => {
+    const api = base().on("GET", EXPORT_PATH, { bytes: new Uint8Array([80, 75, 3, 4]) });
+    const ctx = directContext({ api, config: { downloadDir: dir } });
+    const result = await callTool(exportEntries, { entries: ["uid-x"], format: "markdown" }, ctx);
+    const out = jsonOf(result) as { saved_to: string };
+    expect(out.saved_to).toBe(join(dir, "export.zip"));
+    expect(exportEntries.description).toContain("Markdown ZIP");
   });
 
   test("output_filename overrides the server name", async () => {
@@ -78,8 +136,6 @@ describe("export_entries", () => {
     const ctx = directContext({ api: base(), config: { downloadDir: dir } });
     await expect(callTool(exportEntries, { entries: [] }, ctx)).rejects.toThrow();
   });
-
-
   test("server 401 propagates as a tool error", async () => {
     const api = base().on("GET", EXPORT_PATH, { status: 401, json: { error: "login required" } });
     const ctx = directContext({ api, config: { downloadDir: dir } });

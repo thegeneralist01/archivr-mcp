@@ -75,7 +75,7 @@ If Claude Desktop cannot find `bun` on its PATH, use the absolute path to the bu
 | `ARCHIVR_MCP_TIMEOUT_MS` | `30000` | Per-request HTTP timeout to the Archivr server |
 | `ARCHIVR_MCP_UPLOAD_ROOTS` | none | Path-delimiter-separated directories that `capture_file` may read. `~` is expanded. Empty disables uploads |
 | `ARCHIVR_MCP_MAX_UPLOAD_BYTES` | `2147483648` (2 GiB) | Largest file `capture_file` will upload, in bytes. Positive integer. Archivr itself accepts up to 10 GiB per upload |
-| `ARCHIVR_MCP_DOWNLOAD_DIR` | `$TMPDIR/archivr-mcp-downloads` | Directory `download_artifact` writes into |
+| `ARCHIVR_MCP_DOWNLOAD_DIR` | `$TMPDIR/archivr-mcp-downloads` | Directory `download_artifact` and `export_entries` write into |
 | `ARCHIVR_MCP_LOG` | `warn` | `off`, `error`, `warn`, `info` or `debug`. Stderr only |
 
 ## Toolsets and roles
@@ -113,7 +113,7 @@ Columns: **Role** is the minimum role for the tool to be shown. The server still
 | `delete_entry` | user | destructive | Permanently delete an entry with its child entries and its tag and collection links. |
 | `get_artifact` | user | read | Read an archived file by `entry_uid` and `artifact_index` (or blob sha256), with HTTP Range support. |
 | `download_artifact` | user | write | Stream an archived file into `ARCHIVR_MCP_DOWNLOAD_DIR` (no size limit). |
-| `export_entries` | user | read | Export one or more entries as an HTML or Markdown bundle saved into `ARCHIVR_MCP_DOWNLOAD_DIR`. |
+| `export_entries` | user | write | Export up to 100 entries as an HTML or Markdown ZIP bundle saved into `ARCHIVR_MCP_DOWNLOAD_DIR`. |
 
 ### Capture (14 tools, default on)
 
@@ -235,6 +235,8 @@ A staged upload is deleted if the capture fails.
 `capture_url` refuses `file:` locators. The Archivr server also refuses any `file://` locator that is not a staged upload, and any bare path locator, so local files can only reach an archive through `capture_file`.
 
 **Downloads (`download_artifact`).** The file is written into `ARCHIVR_MCP_DOWNLOAD_DIR`. The name is reduced to a safe basename, and `dest_dir` must stay inside the download directory. The file is created exclusively, so an existing name gets a `-N` suffix unless `overwrite: true` is given. Files are created with mode 0600. There is no size limit.
+
+**Exports (`export_entries`).** Both HTML and Markdown exports are ZIP files, including exports of a single entry. The ZIP contains the document and its assets. The API call is a GET, so a read-scope token can use it. The MCP tool is classed as a write because it saves the ZIP locally, and is hidden when `ARCHIVR_MCP_READONLY=true`. The MCP tool waits at least 15 minutes for response headers; a longer `ARCHIVR_MCP_TIMEOUT_MS` setting is honored.
 
 **Reads (`get_artifact`).** Returns up to 64 KiB by default and at most 1 MiB per call, using HTTP Range. Images up to 1 MiB come back as images. Other binary content returns only its type and size. Use `download_artifact` for the whole file.
 

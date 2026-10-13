@@ -53,3 +53,7 @@ Errors `{"error": msg}`; 401 unauth, 403 role/ownership, 404 missing, 409 state 
 **Not proposed (YAGNI):** entry metadata edit beyond title (`visibility` column is vestigial; real visibility is collection membership), job cancel, server-side entry pagination, frontend/UI updates, admin edit of email/display name.
 
 **Tests** (follow the `oneshot` style in `routes.rs` `mod tests`; new helpers in `test_support.rs`): for every endpoint test guest 401, USER 403, ADMIN OK, ADMIN-vs-OWNER and ADMIN-vs-ADMIN 403, self 409, last-owner 409. Plus regressions: user delete after assigning roles, `session_uid` never in a response, secret canary absent from effective-config, back-dated `expires_at` → 401, read-scope token 403 on POST, job and run scoping, `file:///etc/hosts` → 400.
+
+## Entry exports (Archivr PR #42)
+
+`GET /api/archives/:id/export` accepts comma-separated `entries` (1–100 entry UIDs), `format=html|markdown`, `layout=together|separate` (default `together`), and `credit=true|false` (default `true`). It requires an authenticated user and works with a read-scope token. The response is always `application/zip`, including a single Markdown entry: the ZIP holds the document and accompanying assets. The MCP tool calls the `together` layout `combined` and saves the response locally, so its MCP annotation is `write` even though its HTTP request is GET.

@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { mkdirSync, symlinkSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { ARCHIVE_ID, E2E_DISABLED, Fixture, obj } from "./harness";
 import { assertNoLeaks } from "./leaks";
@@ -8,7 +8,7 @@ import { assertNoLeaks } from "./leaks";
 const USER_TOOLS = [
   "add_to_collection", "capture_file", "capture_options", "capture_text", "capture_url", "change_password",
   "create_api_token", "create_collection", "create_tag", "delete_collection", "delete_entry", "delete_tag",
-  "download_artifact", "generate_text_title", "generate_thread_title", "get_artifact", "get_capture_job",
+  "download_artifact", "export_entries", "generate_text_title", "generate_thread_title", "get_artifact", "get_capture_job",
   "get_collection", "get_entry", "get_summary", "list_archives", "list_capture_jobs", "list_collections",
   "list_entries", "list_entry_children", "list_my_credentials", "list_runs", "list_tags",
   "list_transcription_engines", "probe_playlist", "probe_url", "rearchive_entry", "remove_from_collection",
@@ -68,7 +68,7 @@ describe.skipIf(E2E_DISABLED)("e2e: tools, entries, capture, tags, collections",
     expect(byRole.admin.toolNames).toEqual([...USER_TOOLS, ...ADMIN_ONLY_TOOLS].sort());
     expect(byRole.owner.toolNames).toEqual([...USER_TOOLS, ...ADMIN_ONLY_TOOLS, ...OWNER_ONLY_TOOLS].sort());
     expect(byRole.guest.toolNames).toEqual(["list_archives", "whoami"]);
-    expect([byRole.owner, byRole.admin, byRole.user].map((s) => s.toolNames.length)).toEqual([67, 66, 47]);
+    expect([byRole.owner, byRole.admin, byRole.user].map((s) => s.toolNames.length)).toEqual([68, 67, 48]);
   });
 
   test("admin tools are hidden from a user and a call is refused by the MCP server", async () => {
@@ -82,13 +82,14 @@ describe.skipIf(E2E_DISABLED)("e2e: tools, entries, capture, tags, collections",
   test("default toolsets leave out the credentials tools; read-only mode registers only read-only tools", async () => {
     const dflt = await fx.mcp(fx.cast.owner.token);
     for (const name of CREDENTIAL_TOOLS) expect(dflt.toolNames).not.toContain(name);
-    expect(dflt.toolNames.length).toBe(61);
+    expect(dflt.toolNames.length).toBe(62);
 
     const ro = await fx.mcp(fx.cast.owner.token, { toolsets: ALL_TOOLSETS, readonly: true });
     const listed = await ro.client.listTools();
     expect(listed.tools.length).toBe(23);
     for (const tool of listed.tools) expect(tool.annotations?.readOnlyHint, tool.name).toBe(true);
     expect(ro.toolNames).not.toContain("capture_text");
+    expect(ro.toolNames).not.toContain("export_entries");
     await expectRefused(ro.call("capture_text", { title: "x", body: "y" }));
   });
 
@@ -130,6 +131,24 @@ describe.skipIf(E2E_DISABLED)("e2e: tools, entries, capture, tags, collections",
     const gone = await user.call("get_entry", { entry_uid: entryUid });
     expect(gone.isError).toBe(true);
     expect(gone.text).toContain("404");
+  });
+
+  test("read-scope token exports one Markdown entry as a ZIP", async () => {
+    const user = await fx.mcp(fx.cast.user.token);
+    const captured = obj(await user.call("capture_text", { title: "Export note", body: "# Export me", wait: true }));
+    const entryUid: string = captured["entry_uids"][0];
+    const readToken = await fx.server.mintToken(fx.cast.user.cookie, "e2e-export-read", { scope: "read" });
+    const downloadDir = join(fx.workDir, "entry-exports");
+    const reader = await fx.mcp(readToken.token, { downloadDir });
+    expect(reader.toolNames).toContain("export_entries");
+
+    const result = obj(await reader.call("export_entries", { entries: [entryUid], format: "markdown", layout: "combined" }));
+    expect(result["saved_to"]).toMatch(/\.zip$/);
+    expect(result["entry_count"]).toBe(1);
+    expect([...readFileSync(result["saved_to"]).subarray(0, 4)]).toEqual([80, 75, 3, 4]);
+
+    const readonly = await fx.mcp(readToken.token, { downloadDir, readonly: true });
+    expect(readonly.toolNames).not.toContain("export_entries");
   });
 
   // ── 3. capture_file and the file:// guards ────────────────────────────────
